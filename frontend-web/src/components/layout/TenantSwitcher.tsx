@@ -56,7 +56,7 @@ export function TenantSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex h-8 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-[12px] font-medium text-ink-secondary transition-colors hover:text-white"
+        className="flex h-8 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-[12px] font-medium text-ink-secondary transition-colors hover:text-ink-primary"
       >
         {activeTenantId ? <Building2 size={13} /> : <Globe size={13} />}
         <span className="max-w-[160px] truncate">{label}</span>
@@ -74,7 +74,7 @@ export function TenantSwitcher() {
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors hover:bg-white/[0.04]"
             >
               <Globe size={14} className="text-ink-secondary" />
-              <span className={cn('flex-1', !activeTenantId ? 'text-white' : 'text-ink-secondary')}>
+              <span className={cn('flex-1', !activeTenantId ? 'text-ink-primary' : 'text-ink-secondary')}>
                 Todos os tenants
               </span>
               {!activeTenantId && <Check size={14} className="text-brand-light" />}
@@ -90,7 +90,7 @@ export function TenantSwitcher() {
                 <span
                   className={cn(
                     'flex-1 truncate',
-                    activeTenantId === t.id ? 'text-white' : 'text-ink-secondary',
+                    activeTenantId === t.id ? 'text-ink-primary' : 'text-ink-secondary',
                   )}
                 >
                   {t.nome}

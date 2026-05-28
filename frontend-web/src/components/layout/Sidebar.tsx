@@ -70,8 +70,8 @@ function NavItem({ href, icon: Icon, label, badge, badgeVariant }: NavItemProps)
           'group relative mx-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2',
           'text-[13px] font-medium transition-all duration-150',
           isActive
-            ? 'border border-[rgba(15,71,188,0.3)] bg-brand-blue-soft text-white'
-            : 'border border-transparent text-ink-secondary hover:bg-white/[0.04] hover:text-white',
+            ? 'border border-[rgba(15,71,188,0.3)] bg-brand-blue-soft text-ink-primary'
+            : 'border border-transparent text-ink-secondary hover:bg-white/[0.04] hover:text-ink-primary',
         )
       }
     >

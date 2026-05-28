@@ -46,15 +46,7 @@ import { apiErrorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Role, UsuarioDTO } from '@/types/api';
 
-const tooltipStyle = {
-  background: '#1A2332',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 8,
-  fontSize: 12,
-  color: '#F0F4F8',
-};
-const tooltipItemStyle = { color: '#F0F4F8' };
-const tooltipLabelStyle = { color: '#94A3B8' };
+import { tooltipStyle, tooltipItemStyle, tooltipLabelStyle } from '@/lib/chartTheme';
 
 const ROLE_COLOR: Record<string, string> = {
   ADMIN: '#3B82F6',

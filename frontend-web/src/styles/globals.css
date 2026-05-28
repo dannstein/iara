@@ -18,13 +18,19 @@
   --bg-hover: rgba(255, 255, 255, 0.04);
   --bg-active: rgba(15, 71, 188, 0.12);
 
-  /* Brand */
+  /* Brand — azul */
   --brand-blue-dark: #0f47bc;
   --brand-blue-medium: #0d439a;
   --brand-blue-light: #3b82f6;
   --brand-blue-soft: rgba(15, 71, 188, 0.15);
   --brand-blue-glow: rgba(15, 71, 188, 0.3);
   --brand-white: #fefefe;
+
+  /* Brand — laranja/âmbar (logo IARA — arco solar) */
+  --brand-orange: #e8621a;
+  --brand-amber: #f5a623;
+  --brand-orange-soft: rgba(232, 98, 26, 0.15);
+  --brand-orange-glow: rgba(232, 98, 26, 0.3);
 
   /* Texto */
   --text-primary: #f0f4f8;
@@ -69,6 +75,58 @@
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   color-scheme: dark;
+}
+
+/* ============================================================
+   Light Mode — todas as variáveis de tema redefinidas
+   Ativado via class="light" no <html> ou prefers-color-scheme
+   ============================================================ */
+html.light {
+  color-scheme: light;
+
+  --bg-app: #f0f4f8;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgba(15, 23, 42, 0.6);
+  --bg-hover: rgba(15, 71, 188, 0.06);
+  --bg-active: rgba(15, 71, 188, 0.10);
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-disabled: rgba(71, 85, 105, 0.4);
+  --text-inverse: #fefefe;
+
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-default: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.20);
+  --border-brand: rgba(15, 71, 188, 0.4);
+  --border-focus: #0f47bc;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not(.dark):not(.light) {
+    color-scheme: light;
+
+    --bg-app: #f0f4f8;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8fafc;
+    --bg-elevated: #ffffff;
+    --bg-overlay: rgba(15, 23, 42, 0.6);
+    --bg-hover: rgba(15, 71, 188, 0.06);
+    --bg-active: rgba(15, 71, 188, 0.10);
+
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --text-disabled: rgba(71, 85, 105, 0.4);
+    --text-inverse: #fefefe;
+
+    --border-subtle: rgba(0, 0, 0, 0.06);
+    --border-default: rgba(0, 0, 0, 0.12);
+    --border-strong: rgba(0, 0, 0, 0.20);
+  }
 }
 
 @layer base {
@@ -210,9 +268,15 @@
     @apply animate-shimmer rounded;
   }
 
-  /* Gradient text (§7.2) */
+  /* Gradient text (§7.2) — inclui laranja/âmbar do logo */
   .gradient-text-brand {
-    background: linear-gradient(135deg, #3b82f6 0%, #0f47bc 100%);
+    background: linear-gradient(135deg, #f5a623 0%, #e8621a 40%, #0f47bc 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .gradient-text-solar {
+    background: linear-gradient(135deg, #f5a623 0%, #e8621a 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -245,7 +309,70 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Leaflet — tema escuro para o mapa */
+/* ============================================================
+   Light mode — overrides de componentes que usam white/opacity
+   (btn-secondary, btn-ghost, btn-icon, .input não adaptam
+    automaticamente porque usam bg-white/* arbitrário)
+   ============================================================ */
+html.light .btn-secondary {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-secondary);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+html.light .btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.07);
+  color: var(--text-primary);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+html.light .btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+html.light .btn-icon {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: var(--text-muted);
+}
+html.light .btn-icon:hover {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.14);
+  color: var(--text-secondary);
+}
+html.light .input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+}
+html.light .input:hover { border-color: rgba(0, 0, 0, 0.2); }
+html.light .input:focus {
+  border-color: #0f47bc;
+  box-shadow: 0 0 0 3px rgba(15, 71, 188, 0.15);
+}
+
+/* Scrollbar — light mode */
+html.light ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.04); }
+html.light ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+
+/* Skeleton — light mode */
+html.light .skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* Inputs — light mode */
+html.light select.input option,
+html.light select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+/* Leaflet — usa variáveis então adapta automaticamente */
 .leaflet-container {
   background: var(--bg-app);
   font-family: var(--font-body);
@@ -262,3 +389,7 @@
   color: var(--text-primary);
   border-radius: 8px;
 }
+
+/* Leaflet — light mode overrides explícitos */
+html.light .leaflet-container { background: #dce8f0; }
+html.light .leaflet-popup-content-wrapper { box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid rgba(0,0,0,0.1); }

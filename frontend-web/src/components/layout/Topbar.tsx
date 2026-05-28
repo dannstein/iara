@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { LogOut, ChevronRight } from 'lucide-react';
+import { LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useLogout } from '@/hooks/useAuth';
 import { initials } from '@/lib/utils';
 import { NotificationBell } from './NotificationBell';
 import { TenantSwitcher } from './TenantSwitcher';
+import { useTheme } from '@/hooks/useTheme';
+import type { Theme } from '@/store/themeStore';
 
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -34,6 +36,30 @@ function Breadcrumb() {
         </span>
       ))}
     </nav>
+  );
+}
+
+const THEME_ICONS: Record<Theme, React.ReactNode> = {
+  dark: <Moon size={15} />,
+  light: <Sun size={15} />,
+  system: <Monitor size={15} />,
+};
+const THEME_LABELS: Record<Theme, string> = {
+  dark: 'Modo escuro',
+  light: 'Modo claro',
+  system: 'Seguir sistema',
+};
+
+function ThemeToggle() {
+  const { theme, cycleTheme } = useTheme();
+  return (
+    <button
+      onClick={cycleTheme}
+      title={THEME_LABELS[theme]}
+      className="flex h-9 w-9 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-bg-hover hover:text-ink-primary"
+    >
+      {THEME_ICONS[theme]}
+    </button>
   );
 }
 
@@ -73,7 +99,7 @@ function UserMenu() {
           </div>
           <button
             onClick={handleLogout}
-            className="flex w-full items-center gap-2 px-4 py-3 text-left text-[13px] text-ink-secondary transition-colors hover:bg-white/[0.04] hover:text-white"
+            className="flex w-full items-center gap-2 px-4 py-3 text-left text-[13px] text-ink-secondary transition-colors hover:bg-white/[0.04] hover:text-ink-primary"
           >
             <LogOut size={15} /> Sair
           </button>
@@ -85,18 +111,34 @@ function UserMenu() {
 
 export function Topbar() {
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 flex h-14 items-center gap-4 border-b border-white/5 bg-bg-primary px-6">
+    <header className="fixed left-0 right-0 top-0 z-50 flex h-14 items-center gap-4 bg-bg-primary px-6"
+      style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      {/* Accent line — gradiente com as cores do logo (azul + laranja) */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+        style={{ background: 'linear-gradient(90deg, #0f47bc 0%, #e8621a 50%, #f5a623 100%)', opacity: 0.5 }}
+      />
+
       <Link to="/dashboard" className="flex w-[208px] flex-shrink-0 items-center gap-2.5">
         <img src="/logo-iara.svg" alt="IARA" className="h-7 w-auto" />
-        <span className="text-[15px] font-bold tracking-tight text-white">IARA</span>
-        <span className="ml-1 rounded border border-[rgba(15,71,188,0.3)] bg-brand-blue-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-brand-light">
+        <span className="text-[15px] font-bold tracking-tight text-ink-primary">IARA</span>
+        {/* Badge DC usa laranja/âmbar do logo em vez de azul */}
+        <span
+          className="ml-1 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
+          style={{
+            background: 'rgba(232, 98, 26, 0.15)',
+            border: '1px solid rgba(232, 98, 26, 0.35)',
+            color: '#f5a623',
+          }}
+        >
           DC
         </span>
       </Link>
       <Breadcrumb />
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <TenantSwitcher />
         <NotificationBell />
+        <ThemeToggle />
         <UserMenu />
       </div>
     </header>

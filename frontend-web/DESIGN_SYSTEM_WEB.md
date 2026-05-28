@@ -36,16 +36,53 @@
 
 ### 1.2 Cores de Marca (Brand)
 
-Extraídas do escopo visual do IARA:
+O logo IARA representa **sol + ondas**: metade superior com gradiente laranja/âmbar (arco solar), metade inferior com ondas azuis. A paleta de marca reflete ambas as metades.
+
+#### Família Azul (ondas — identidade principal)
 
 | Token | Valor | Uso |
 |-------|-------|-----|
-| `--brand-blue-dark` | `#0F47BC` | Cor primária da marca — CTAs, destaques |
-| `--brand-blue-medium` | `#0D439A` | Variante intermediária — bordas, hover |
-| `--brand-blue-light` | `#3B82F6` | Links, ícones de ação, indicadores |
-| `--brand-blue-soft` | `rgba(15, 71, 188, 0.15)` | Background sutil em elementos brand |
-| `--brand-blue-glow` | `rgba(15, 71, 188, 0.3)` | Glow em hover/focus de elementos primários |
-| `--brand-white` | `#FEFEFE` | Texto em botões brand, logo |
+| `--brand-blue-dark` | `#0F47BC` | Cor primária — CTAs, destaques |
+| `--brand-blue-medium` | `#0D439A` | Hover de botões primários |
+| `--brand-blue-light` | `#3B82F6` | Links, ícones, indicadores |
+| `--brand-blue-soft` | `rgba(15, 71, 188, 0.15)` | Background sutil |
+| `--brand-blue-glow` | `rgba(15, 71, 188, 0.3)` | Glow/focus |
+| `--brand-white` | `#FEFEFE` | Texto sobre fundos escuros/azuis |
+
+#### Família Laranja/Âmbar (sol — acento e identidade visual)
+
+Derivados diretamente do gradiente do arco solar no logo:
+
+| Token | Valor | Tailwind | Uso |
+|-------|-------|----------|-----|
+| `--brand-orange` | `#E8621A` | `brand-orange` | Laranja quente — badge DC, accents de campo |
+| `--brand-amber` | `#F5A623` | `brand-amber` | Âmbar/dourado — ponto mais claro do gradiente solar |
+| `--brand-orange-soft` | `rgba(232, 98, 26, 0.15)` | — | Background sutil em elementos orange |
+| `--brand-orange-glow` | `rgba(232, 98, 26, 0.3)` | — | Glow em hover orange |
+
+**Onde usar laranja/âmbar:**
+- Badge "DC" na topbar (acento do logo)
+- Linha de acento na borda inferior da topbar (gradiente azul→laranja→âmbar)
+- `.gradient-text-brand` — gradiente de texto da marca (âmbar→laranja→azul)
+- `.gradient-text-solar` — gradiente somente solar (âmbar→laranja), para títulos especiais
+
+```css
+/* Gradiente completo da marca — reflete o logo */
+.gradient-text-brand {
+  background: linear-gradient(135deg, #F5A623 0%, #E8621A 40%, #0F47BC 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Só solar — para accents de campo/operações */
+.gradient-text-solar {
+  background: linear-gradient(135deg, #F5A623 0%, #E8621A 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+```
 
 ### 1.3 Cores de Texto
 
@@ -1578,5 +1615,70 @@ VITE_MAP_TILE_URL=https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
 
 ---
 
-*IARA Design System Web — v1.0*
+## 17. Temas (Dark / Light / System)
+
+### 17.1 Arquitetura
+
+A troca de tema é feita via classe no elemento `<html>`:
+- `html.dark` → dark mode (padrão)
+- `html.light` → light mode
+- sem classe → `prefers-color-scheme` do OS (modo `system`)
+
+Todos os tokens de cor são CSS custom properties redefinidas no seletor `html.light { }` em `globals.css`. Os tokens de severidade e brand permanecem iguais em ambos os modos.
+
+### 17.2 Paleta Light Mode
+
+| Token | Dark | Light |
+|-------|------|-------|
+| `--bg-app` | `#070B14` | `#F0F4F8` |
+| `--bg-primary` | `#0C1220` | `#FFFFFF` |
+| `--bg-secondary` | `#111827` | `#F8FAFC` |
+| `--bg-elevated` | `#1A2332` | `#FFFFFF` |
+| `--text-primary` | `#F0F4F8` | `#0F172A` |
+| `--text-secondary` | `#94A3B8` | `#334155` |
+| `--border-default` | `rgba(255,255,255,0.1)` | `rgba(0,0,0,0.12)` |
+
+### 17.3 Toggle Component
+
+```tsx
+// src/components/layout/Topbar.tsx — ThemeToggle
+// Cicla: dark → light → system → dark
+// Ícones: Moon / Sun / Monitor (Lucide)
+// Posição: entre NotificationBell e UserMenu
+
+import { useTheme } from '@/hooks/useTheme';
+
+function ThemeToggle() {
+  const { theme, cycleTheme } = useTheme();
+  const icons = { dark: <Moon size={15} />, light: <Sun size={15} />, system: <Monitor size={15} /> };
+  return (
+    <button onClick={cycleTheme} title={theme} className="btn-icon">
+      {icons[theme]}
+    </button>
+  );
+}
+```
+
+### 17.4 Inicialização sem Flash (FOUC)
+
+Um script inline em `index.html` (antes do bundle React) lê o `localStorage` e aplica a classe dark/light antes que o browser renderize qualquer pixel:
+
+```html
+<script>
+  try {
+    var s = localStorage.getItem('iara_theme');
+    var t = s ? JSON.parse(s)?.state?.theme ?? 'dark' : 'dark';
+    var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.add(dark ? 'dark' : 'light');
+  } catch(e) { document.documentElement.classList.add('dark'); }
+</script>
+```
+
+### 17.5 Persistência
+
+O tema é persistido no `localStorage` via Zustand persist (`iara_theme`). O hook `useTheme()` em `App.tsx` sincroniza o estado com a classe no `<html>` e escuta mudanças de `prefers-color-scheme` quando em modo `system`.
+
+---
+
+*IARA Design System Web — v1.1*
 *Plataforma de Comando e Controle · Defesa Civil*
