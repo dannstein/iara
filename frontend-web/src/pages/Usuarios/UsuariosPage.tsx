@@ -31,6 +31,7 @@ import {
 } from '@/components/ui';
 import { NovoUsuarioModal } from './NovoUsuarioModal';
 import { VoluntariosView } from './VoluntariosView';
+import { EmRiscoTab } from './EmRiscoTab';
 import { TenantFilter } from '@/components/TenantFilter';
 import { SearchInput } from '@/components/SearchInput';
 import { useTenantOptions, usePagination } from '@/hooks/useTenantTable';
@@ -74,7 +75,7 @@ const STATUS_COLOR: Record<string, string> = {
 const ROLES: Role[] = ['ADMIN', 'GESTOR', 'MONITOR', 'COORDENADOR', 'TECNICO', 'DOADOR', 'USUARIO_SIMPLES'];
 
 export function UsuariosPage() {
-  const [view, setView] = useState<'contas' | 'voluntarios'>('contas');
+  const [view, setView] = useState<'contas' | 'voluntarios' | 'em-risco'>('contas');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -204,7 +205,7 @@ export function UsuariosPage() {
         action={
           <div className="flex items-center gap-2">
             <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
-              {(['contas', 'voluntarios'] as const).map((v) => (
+              {(['contas', 'voluntarios', 'em-risco'] as const).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -212,7 +213,7 @@ export function UsuariosPage() {
                     view === v ? 'bg-brand-blue-soft text-white' : 'text-ink-muted hover:text-ink-secondary'
                   }`}
                 >
-                  {v === 'contas' ? 'Contas' : 'Voluntários'}
+                  {v === 'contas' ? 'Contas' : v === 'voluntarios' ? 'Voluntários' : 'Em Risco'}
                 </button>
               ))}
             </div>
@@ -226,6 +227,8 @@ export function UsuariosPage() {
       />
 
       {view === 'voluntarios' && <VoluntariosView />}
+
+      {view === 'em-risco' && <EmRiscoTab />}
 
       {view === 'contas' && (
         <>

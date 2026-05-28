@@ -137,6 +137,7 @@ Cadastro 🔓 (público). Os de aprovação automática (doador/simples/coordena
 | PUT | `/usuarios/me` | 👤 | `{ "nome?","telefone?","fotoUrl?","localizacao?":{lat,lng}, "endereco?":{cep,logradouro,numero,complemento,bairro,cidade,uf,coordenadas:{lat,lng}} }` | UsuarioDTO |
 | PATCH | `/usuarios/me/disponibilidade?disponivel=true` | TECNICO | query `disponivel` opcional (omitido = alterna) | UsuarioDTO |
 | GET | `/usuarios/pendentes` | GESTOR | — | UsuarioDTO[] |
+| GET | `/usuarios/em-risco` | GESTOR | — | UsuariosEmRiscoDTO |
 | GET | `/usuarios/{id}` | GESTOR | — | UsuarioDTO |
 | GET | `/usuarios?role=&status=&especialidade=` | GESTOR | filtros opcionais (role, status, especialidade=uuid) | UsuarioDTO[] |
 | POST | `/usuarios` | GESTOR | `{ "nome","email","telefone?","documento","senha","tenantId","roleNome" }` | UsuarioDTO 201. Conta criada APROVADA. Sem escalonamento: perfil ≤ perfil do criador (só ADMIN cria ADMIN); tenant deve estar no escopo do criador (senão 403) |
@@ -147,6 +148,11 @@ Cadastro 🔓 (público). Os de aprovação automática (doador/simples/coordena
 | PATCH | `/usuarios/{id}/bloquear` | ADMIN | — | UsuarioDTO |
 
 **UsuarioDTO:** `{ id, nome, email, telefone, documento, role, tenantId, especId, cadastroSts, estaDisponivel, fotoUrl, docComprovacaoNumero, docComprovacaoUrl, createdAt }`
+
+**UsuariosEmRiscoDTO:** `{ totalUsuariosEmRisco, zonas:[ZonaComUsuariosDTO], eventos:[EventoComUsuariosDTO] }`
+**ZonaComUsuariosDTO:** `{ zonaId, zonaNome, zonaTipo, nivelRisco, totalUsuarios, geometria:GeoJSON|null, usuarios:[UsuarioLocalizacaoDTO] }`
+**EventoComUsuariosDTO:** `{ eventoId, eventoTitulo, severidade, status, raioMetros, coordenadas:{lat,lng}, totalUsuarios, usuarios:[UsuarioLocalizacaoDTO] }`
+**UsuarioLocalizacaoDTO:** `{ id, nome, role, telefone, localizacao:{lat,lng} }` — somente exposto para usuários dentro de área de risco ativa (LGPD Art. 7 VII — interesses vitais)
 
 ---
 
