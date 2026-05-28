@@ -1,7 +1,11 @@
 package br.com.iara.iara_api.controller;
 
+import br.com.iara.iara_api.dto.servico.PrioridadeRequest;
+import br.com.iara.iara_api.dto.servico.SolicitacaoHistoricoDTO;
 import br.com.iara.iara_api.dto.servico.SolicitacaoServicoDTO;
+import br.com.iara.iara_api.dto.servico.TransicaoRequest;
 import br.com.iara.iara_api.service.SolicitacaoServicoService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -47,21 +51,43 @@ public class SolicitacaoServicoController {
         return service.detalhar(id);
     }
 
+    @GetMapping("/{id}/historico")
+    @PreAuthorize("hasRole('MONITOR')")
+    public List<SolicitacaoHistoricoDTO> historico(@PathVariable UUID id) {
+        return service.historico(id);
+    }
+
+    @PatchMapping("/{id}/revisar")
+    @PreAuthorize("hasRole('MONITOR')")
+    public SolicitacaoServicoDTO revisar(@PathVariable UUID id,
+                                         @RequestBody(required = false) TransicaoRequest req) {
+        return service.revisar(id, req != null ? req.observacao() : null);
+    }
+
     @PatchMapping("/{id}/assumir")
     @PreAuthorize("hasRole('MONITOR')")
-    public SolicitacaoServicoDTO assumir(@PathVariable UUID id) {
-        return service.assumir(id);
+    public SolicitacaoServicoDTO assumir(@PathVariable UUID id,
+                                         @RequestBody(required = false) TransicaoRequest req) {
+        return service.assumir(id, req != null ? req.observacao() : null);
     }
 
     @PatchMapping("/{id}/concluir")
     @PreAuthorize("hasRole('MONITOR')")
-    public SolicitacaoServicoDTO concluir(@PathVariable UUID id) {
-        return service.concluir(id);
+    public SolicitacaoServicoDTO concluir(@PathVariable UUID id,
+                                          @RequestBody(required = false) TransicaoRequest req) {
+        return service.concluir(id, req != null ? req.observacao() : null);
     }
 
     @PatchMapping("/{id}/indeferir")
     @PreAuthorize("hasRole('MONITOR')")
     public SolicitacaoServicoDTO indeferir(@PathVariable UUID id, @RequestBody Map<String, String> body) {
         return service.indeferir(id, body.get("parecer"));
+    }
+
+    @PatchMapping("/{id}/prioridade")
+    @PreAuthorize("hasRole('MONITOR')")
+    public SolicitacaoServicoDTO prioridade(@PathVariable UUID id,
+                                            @Valid @RequestBody PrioridadeRequest req) {
+        return service.setPrioridade(id, req.prioridade());
     }
 }

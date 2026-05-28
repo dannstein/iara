@@ -13,6 +13,7 @@ import { HospitaisPage } from '@/pages/Hospitais/HospitaisPage';
 import { UsuariosPage } from '@/pages/Usuarios/UsuariosPage';
 import { ZonasRiscoPage } from '@/pages/ZonasRisco/ZonasRiscoPage';
 import { PontosApoioPage } from '@/pages/PontosApoio/PontosApoioPage';
+import { PrevencaoPage } from '@/pages/Prevencao/PrevencaoPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
           { path: 'eventos', element: <EventosPage /> },
           { path: 'eventos/:id', element: <EventoDetailPage /> },
           { path: 'mapa', element: <MapaPage /> },
+          { path: 'prevencao', element: <PrevencaoPage /> },
           { path: 'pontos-coleta', element: <PontosColetaPage /> },
           { path: 'abrigos', element: <AbrigosPage /> },
           { path: 'hospitais', element: <HospitaisPage /> },

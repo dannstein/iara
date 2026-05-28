@@ -556,11 +556,14 @@ Local de apoio cadastrado de forma independente; atende no máximo uma zona de r
 | GET | `/solicitacoes-servico/minhas` | 👤 | — | SolicitacaoServicoDTO[] |
 | GET | `/solicitacoes-servico/{id}` | 👤 | — | SolicitacaoServicoDTO (com `pdfUrls`) |
 | GET | `/solicitacoes-servico` | MONITOR | — | SolicitacaoServicoDTO[] (fila de triagem do tenant) |
-| PATCH | `/solicitacoes-servico/{id}/assumir` | MONITOR | — | SolicitacaoServicoDTO (EM_ATENDIMENTO) |
-| PATCH | `/solicitacoes-servico/{id}/concluir` | MONITOR | — | SolicitacaoServicoDTO (CONCLUIDA) |
+| PATCH | `/solicitacoes-servico/{id}/assumir` | MONITOR | `{ "observacao?" }` | SolicitacaoServicoDTO (EM_ATENDIMENTO, registra histórico) |
+| PATCH | `/solicitacoes-servico/{id}/concluir` | MONITOR | `{ "observacao?" }` | SolicitacaoServicoDTO (CONCLUIDA, registra histórico) |
+| PATCH | `/solicitacoes-servico/{id}/revisar` | MONITOR | `{ "observacao?" }` | SolicitacaoServicoDTO (EM_TRIAGEM, registra histórico) |
 | PATCH | `/solicitacoes-servico/{id}/indeferir` | MONITOR | `{ "parecer" }` | SolicitacaoServicoDTO (INDEFERIDA) |
+| PATCH | `/solicitacoes-servico/{id}/prioridade` | MONITOR | `{ "prioridade":"BAIXA\|MEDIA\|ALTA\|CRITICA" }` | SolicitacaoServicoDTO |
+| GET | `/solicitacoes-servico/{id}/historico` | MONITOR | — | SolicitacaoHistoricoDTO[] `{ id, statusPara, observacao, responsavelId, createdAt }` |
 
-**SolicitacaoServicoDTO:** `{ id, usuarioId, tipo, enderecoTxt, geometria:{lat,lng}, descricaoMotivo, fotosUrls:[{url,ordem}], status, observacaoDc, pdfUrls:[string], createdAt }`
+**SolicitacaoServicoDTO:** `{ id, usuarioId, tenantId, tipo, enderecoTxt, geometria:{lat,lng}, descricaoMotivo, fotosUrls:[{url,ordem}], status, prioridade:"BAIXA|MEDIA|ALTA|CRITICA"|null, responsavelId, observacaoDc, pdfUrls:[string], createdAt }`
 
 ---
 

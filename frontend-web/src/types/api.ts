@@ -305,6 +305,44 @@ export interface ZonaRiscoDTO {
   isActive: boolean;
 }
 
+export type SolicitacaoStatus =
+  | 'ABERTA'
+  | 'EM_TRIAGEM'
+  | 'EM_ATENDIMENTO'
+  | 'CONCLUIDA'
+  | 'INDEFERIDA';
+export type SolicitacaoTipo =
+  | 'CORTE_ARVORE'
+  | 'VISTORIA_RACHADURA'
+  | 'LIMPEZA_BUEIRO'
+  | 'RISCO_DESLIZAMENTO'
+  | 'OUTRO';
+
+export interface SolicitacaoServicoDTO {
+  id: string;
+  usuarioId: string;
+  tenantId: string;
+  tipo: SolicitacaoTipo | string;
+  enderecoTxt: string;
+  geometria: Coordenadas | null;
+  descricaoMotivo: string;
+  fotosUrls: { url: string; ordem: number }[];
+  status: SolicitacaoStatus;
+  prioridade: 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA' | null;
+  responsavelId: string | null;
+  observacaoDc: string | null;
+  pdfUrls: string[];
+  createdAt: string;
+}
+
+export interface SolicitacaoHistoricoDTO {
+  id: string;
+  statusPara: SolicitacaoStatus;
+  observacao: string | null;
+  responsavelId: string | null;
+  createdAt: string;
+}
+
 export interface NotificacaoDTO {
   id: string;
   titulo: string;

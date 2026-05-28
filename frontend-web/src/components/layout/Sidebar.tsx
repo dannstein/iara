@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   Users,
   LifeBuoy,
+  ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ const groups: NavGroup[] = [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { href: '/eventos', icon: AlertTriangle, label: 'Eventos' },
       { href: '/mapa', icon: Map, label: 'Mapa' },
+      { href: '/prevencao', icon: ShieldCheck, label: 'Prevenção' },
     ],
   },
   {

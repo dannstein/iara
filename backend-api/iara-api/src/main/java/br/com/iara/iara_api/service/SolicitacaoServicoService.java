@@ -1,8 +1,10 @@
 package br.com.iara.iara_api.service;
 
 import br.com.iara.iara_api.domain.DocumentoGerado;
+import br.com.iara.iara_api.domain.SolicitacaoHistorico;
 import br.com.iara.iara_api.domain.SolicitacaoServico;
 import br.com.iara.iara_api.domain.Usuario;
+import br.com.iara.iara_api.dto.servico.SolicitacaoHistoricoDTO;
 import br.com.iara.iara_api.dto.servico.SolicitacaoServicoDTO;
 import br.com.iara.iara_api.exception.BusinessException;
 import br.com.iara.iara_api.exception.ForbiddenException;
@@ -10,6 +12,7 @@ import br.com.iara.iara_api.exception.NotFoundException;
 import br.com.iara.iara_api.integration.FileStorageService;
 import br.com.iara.iara_api.integration.PdfService;
 import br.com.iara.iara_api.repository.DocumentoGeradoRepository;
+import br.com.iara.iara_api.repository.SolicitacaoHistoricoRepository;
 import br.com.iara.iara_api.repository.SolicitacaoServicoRepository;
 import br.com.iara.iara_api.security.CurrentUser;
 import br.com.iara.iara_api.security.TenantScope;
@@ -27,7 +30,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SolicitacaoServicoService {
 
+    private static final java.util.Set<String> PRIORIDADES =
+            java.util.Set.of("BAIXA", "MEDIA", "ALTA", "CRITICA");
+
     private final SolicitacaoServicoRepository repository;
+    private final SolicitacaoHistoricoRepository historicoRepository;
     private final DocumentoGeradoRepository documentoRepository;
     private final FileStorageService fileStorageService;
     private final PdfService pdfService;
@@ -95,17 +102,33 @@ public class SolicitacaoServicoService {
     }
 
     @Transactional
-    public SolicitacaoServicoDTO assumir(UUID id) {
+    public SolicitacaoServicoDTO revisar(UUID id, String observacao) {
         SolicitacaoServico s = buscarDoTenant(id);
-        s.setStatus("EM_ATENDIMENTO");
-        s.setResponsavel(currentUser.require());
+        s.setStatus("EM_TRIAGEM");
+        if (s.getResponsavel() == null) {
+            s.setResponsavel(currentUser.require());
+        }
+        registrarHistorico(s, "EM_TRIAGEM", observacao);
         return toDTO(s);
     }
 
     @Transactional
-    public SolicitacaoServicoDTO concluir(UUID id) {
+    public SolicitacaoServicoDTO assumir(UUID id, String observacao) {
+        SolicitacaoServico s = buscarDoTenant(id);
+        s.setStatus("EM_ATENDIMENTO");
+        s.setResponsavel(currentUser.require());
+        registrarHistorico(s, "EM_ATENDIMENTO", observacao);
+        return toDTO(s);
+    }
+
+    @Transactional
+    public SolicitacaoServicoDTO concluir(UUID id, String observacao) {
         SolicitacaoServico s = buscarDoTenant(id);
         s.setStatus("CONCLUIDA");
+        if (observacao != null && !observacao.isBlank()) {
+            s.setObservacaoDc(observacao);
+        }
+        registrarHistorico(s, "CONCLUIDA", observacao);
         return toDTO(s);
     }
 
@@ -114,7 +137,35 @@ public class SolicitacaoServicoService {
         SolicitacaoServico s = buscarDoTenant(id);
         s.setStatus("INDEFERIDA");
         s.setObservacaoDc(parecer);
+        registrarHistorico(s, "INDEFERIDA", parecer);
         return toDTO(s);
+    }
+
+    @Transactional
+    public SolicitacaoServicoDTO setPrioridade(UUID id, String prioridade) {
+        if (prioridade == null || !PRIORIDADES.contains(prioridade)) {
+            throw new BusinessException("Prioridade inválida (BAIXA, MEDIA, ALTA, CRITICA)");
+        }
+        SolicitacaoServico s = buscarDoTenant(id);
+        s.setPrioridade(prioridade);
+        registrarHistorico(s, s.getStatus(), "Prioridade definida: " + prioridade);
+        return toDTO(s);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SolicitacaoHistoricoDTO> historico(UUID id) {
+        buscarDoTenant(id); // valida escopo
+        return historicoRepository.findBySolicitacaoIdOrderByCreatedAtAsc(id).stream()
+                .map(SolicitacaoHistoricoDTO::from).toList();
+    }
+
+    private void registrarHistorico(SolicitacaoServico s, String statusPara, String observacao) {
+        SolicitacaoHistorico h = new SolicitacaoHistorico();
+        h.setSolicitacao(s);
+        h.setStatusPara(statusPara);
+        h.setObservacao(observacao);
+        h.setResponsavel(currentUser.require());
+        historicoRepository.save(h);
     }
 
     // -------------------------------------------------------------- helpers
