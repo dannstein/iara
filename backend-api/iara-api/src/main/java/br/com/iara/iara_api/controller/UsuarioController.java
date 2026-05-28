@@ -2,6 +2,7 @@ package br.com.iara.iara_api.controller;
 
 import br.com.iara.iara_api.dto.auth.TokenResponse;
 import br.com.iara.iara_api.dto.usuario.*;
+import br.com.iara.iara_api.dto.usuario.UsuariosEmRiscoDTO;
 import br.com.iara.iara_api.service.UsuarioService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -129,5 +130,11 @@ public class UsuarioController {
     @PreAuthorize("hasRole('ADMIN')")
     public UsuarioDTO bloquear(@PathVariable UUID id) {
         return service.bloquear(id);
+    }
+
+    @GetMapping("/em-risco")
+    @PreAuthorize("hasRole('GESTOR')")
+    public UsuariosEmRiscoDTO usuariosEmRisco() {
+        return service.usuariosEmRisco();
     }
 }

@@ -8,6 +8,10 @@ import br.com.iara.iara_api.exception.ForbiddenException;
 import br.com.iara.iara_api.exception.NotFoundException;
 import br.com.iara.iara_api.integration.FileStorageService;
 import br.com.iara.iara_api.messaging.NotificationPublisher;
+import br.com.iara.iara_api.dto.usuario.EventoComUsuariosDTO;
+import br.com.iara.iara_api.dto.usuario.UsuarioLocalizacaoDTO;
+import br.com.iara.iara_api.dto.usuario.UsuariosEmRiscoDTO;
+import br.com.iara.iara_api.dto.usuario.ZonaComUsuariosDTO;
 import br.com.iara.iara_api.repository.*;
 import br.com.iara.iara_api.security.CurrentUser;
 import br.com.iara.iara_api.security.TenantScope;
@@ -20,9 +24,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -42,6 +48,8 @@ public class UsuarioService {
     private final NotificationPublisher notificationPublisher;
     private final CheckinRepository checkinRepository;
     private final VitimaTriagemRepository triagemRepository;
+    private final ZonaRiscoRepository zonaRiscoRepository;
+    private final EventoRepository eventoRepository;
 
     // ---------------------------------------------------------------- cadastro
 
@@ -302,6 +310,56 @@ public class UsuarioService {
             case "TECNICO", "DOADOR" -> 1;
             default -> 0; // USUARIO_SIMPLES
         };
+    }
+
+    // ---------------------------------------------------------------- monitoramento de risco (LGPD Art.7 VII)
+
+    @Transactional(readOnly = true)
+    public UsuariosEmRiscoDTO usuariosEmRisco() {
+        Usuario gestor = currentUser.require();
+        List<UUID> tenantIds = tenantScope.visibleTenantIds(gestor);
+
+        List<ZonaComUsuariosDTO> zonas = new ArrayList<>();
+        Set<UUID> uniqueIds = new HashSet<>();
+
+        for (UUID tenantId : tenantIds) {
+            for (ZonaRisco z : zonaRiscoRepository
+                    .findByTenantIdInAndIsActiveTrueOrderByNivelRiscoDesc(List.of(tenantId))) {
+                List<UsuarioLocalizacaoDTO> users = usuarioRepository
+                        .usuariosEmZonaRisco(z.getId(), tenantId)
+                        .stream()
+                        .map(u -> {
+                            uniqueIds.add(u.getId());
+                            return UsuarioLocalizacaoDTO.from(u);
+                        })
+                        .toList();
+                if (!users.isEmpty()) {
+                    zonas.add(ZonaComUsuariosDTO.from(z, users));
+                }
+            }
+        }
+
+        List<EventoComUsuariosDTO> eventos = new ArrayList<>();
+        List<Evento> eventosAtivos = eventoRepository.filtrar(tenantIds, null, null, null, false)
+                .stream()
+                .filter(e -> "ATIVO".equals(e.getStatus()) || "ALERTA_CRITICO".equals(e.getStatus()))
+                .toList();
+
+        for (Evento e : eventosAtivos) {
+            List<UsuarioLocalizacaoDTO> users = usuarioRepository
+                    .usuariosNoRaioDoEvento(e.getId(), e.getRaioMetros(), e.getTenant().getId())
+                    .stream()
+                    .map(u -> {
+                        uniqueIds.add(u.getId());
+                        return UsuarioLocalizacaoDTO.from(u);
+                    })
+                    .toList();
+            if (!users.isEmpty()) {
+                eventos.add(EventoComUsuariosDTO.from(e, users));
+            }
+        }
+
+        return new UsuariosEmRiscoDTO(uniqueIds.size(), zonas, eventos);
     }
 
     // ---------------------------------------------------------------- helpers

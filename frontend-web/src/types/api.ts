@@ -415,3 +415,39 @@ export interface DashboardPontosAtencao {
   SEM_APOIO: number;
   COM_APOIO: number;
 }
+
+// Monitoramento de usuários em risco (GET /usuarios/em-risco — GESTOR)
+export interface UsuarioLocalizacaoDTO {
+  id: string;
+  nome: string;
+  role: Role;
+  telefone: string | null;
+  localizacao: Coordenadas;
+}
+
+export interface ZonaComUsuariosDTO {
+  zonaId: string;
+  zonaNome: string;
+  zonaTipo: ZonaTipo;
+  nivelRisco: number;
+  totalUsuarios: number;
+  geometria: GeoJsonGeometry | null;
+  usuarios: UsuarioLocalizacaoDTO[];
+}
+
+export interface EventoComUsuariosDTO {
+  eventoId: string;
+  eventoTitulo: string;
+  severidade: Severidade;
+  status: EventoStatus;
+  raioMetros: number;
+  coordenadas: Coordenadas;
+  totalUsuarios: number;
+  usuarios: UsuarioLocalizacaoDTO[];
+}
+
+export interface UsuariosEmRiscoDTO {
+  totalUsuariosEmRisco: number;
+  zonas: ZonaComUsuariosDTO[];
+  eventos: EventoComUsuariosDTO[];
+}

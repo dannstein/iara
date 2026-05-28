@@ -32,6 +32,30 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
                           @Param("status") String status,
                           @Param("especId") UUID especId);
 
+    /** Usuários com localização cadastrada dentro da geometria de uma zona de risco ativa. */
+    @Query(value = """
+            select u.* from iara_usuario u
+            where u.localizacao is not null
+              and u.id_tenant = :tenantId
+              and ST_Within(u.localizacao,
+                    (select z.geometria from iara_zona_risco z where z.id = :zonaId))
+            """, nativeQuery = true)
+    List<Usuario> usuariosEmZonaRisco(@Param("zonaId") UUID zonaId, @Param("tenantId") UUID tenantId);
+
+    /** Usuários com localização cadastrada dentro do raio (metros) de um evento. */
+    @Query(value = """
+            select u.* from iara_usuario u
+            where u.localizacao is not null
+              and u.id_tenant = :tenantId
+              and ST_DWithin(
+                    u.localizacao::geography,
+                    (select e.coordenadas::geography from iara_evento e where e.id = :eventoId),
+                    :raioMetros)
+            """, nativeQuery = true)
+    List<Usuario> usuariosNoRaioDoEvento(@Param("eventoId") UUID eventoId,
+                                         @Param("raioMetros") int raioMetros,
+                                         @Param("tenantId") UUID tenantId);
+
     /**
      * Técnicos aprovados e disponíveis dentro do raio (em metros) de uma coordenada (query 2 do DDL).
      * Ordenados por distância ascendente. especId opcional (String para permitir cast/NULL no native).

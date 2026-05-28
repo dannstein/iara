@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { AtendimentoDTO, Role, UsuarioDTO } from '@/types/api';
+import type { AtendimentoDTO, Role, UsuarioDTO, UsuariosEmRiscoDTO } from '@/types/api';
 
 export function useEventosAtendidos(id: string | null | undefined) {
   return useQuery({
@@ -106,6 +106,15 @@ export function useUsuario(id: string | null | undefined) {
     queryFn: () => api.get<UsuarioDTO>(`/usuarios/${id}`).then((r) => r.data),
     enabled: !!id,
     staleTime: TEN_MIN,
+  });
+}
+
+/** Usuários dentro de zonas de risco ativas ou raio de evento ativo (GESTOR). Atualiza a cada 60s. */
+export function useUsuariosEmRisco() {
+  return useQuery({
+    queryKey: ['usuarios', 'em-risco'],
+    queryFn: () => api.get<UsuariosEmRiscoDTO>('/usuarios/em-risco').then((r) => r.data),
+    refetchInterval: 60_000,
   });
 }
 
