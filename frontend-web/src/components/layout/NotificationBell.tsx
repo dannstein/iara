@@ -29,7 +29,7 @@ export function NotificationBell() {
       <button
         aria-label="Notificações"
         onClick={() => setOpen((o) => !o)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-white/5 hover:text-white"
+        className="relative flex h-9 w-9 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-white/5 hover:text-ink-primary"
       >
         <Bell size={18} />
         {count > 0 && (

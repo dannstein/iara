@@ -32,17 +32,7 @@ import { useEventos } from '@/hooks/useEventos';
 import { useDashboardZonasSemApoio } from '@/hooks/useZonasRisco';
 import { formatRelative } from '@/lib/utils';
 
-const tooltipStyle = {
-  background: '#1A2332',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 8,
-  fontSize: 12,
-  color: '#F0F4F8',
-};
-// Recharts pinta o texto dos itens/label com a cor da série (escura) por padrão.
-// Forçamos cores legíveis no tema escuro.
-const tooltipItemStyle = { color: '#F0F4F8' };
-const tooltipLabelStyle = { color: '#94A3B8' };
+import { tooltipStyle, tooltipItemStyle, tooltipLabelStyle } from '@/lib/chartTheme';
 
 export function DashboardPage() {
   const navigate = useNavigate();

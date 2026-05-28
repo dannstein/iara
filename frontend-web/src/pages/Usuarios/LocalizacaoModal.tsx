@@ -117,13 +117,13 @@ export function LocalizacaoModal({ usuario, context, onClose }: Props) {
             >
               <Popup>
                 <div style={{ minWidth: 140 }}>
-                  <strong style={{ color: '#F0F4F8', fontSize: 13 }}>{usuario.nome}</strong>
+                  <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>{usuario.nome}</strong>
                   <br />
-                  <span style={{ color: '#94A3B8', fontSize: 11 }}>{usuario.role}</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{usuario.role}</span>
                   {usuario.telefone && (
                     <>
                       <br />
-                      <span style={{ color: '#64748B', fontSize: 11 }}>{usuario.telefone}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{usuario.telefone}</span>
                     </>
                   )}
                 </div>

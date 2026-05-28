@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" class="dark">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo-iara.svg" />
@@ -10,6 +10,15 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- theme init: applied before React mounts to prevent flash -->
+    <script>
+      try {
+        var s = localStorage.getItem('iara_theme');
+        var t = s ? (JSON.parse(s)?.state?.theme ?? 'dark') : 'dark';
+        var dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.add(dark ? 'dark' : 'light');
+      } catch(e) { document.documentElement.classList.add('dark'); }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

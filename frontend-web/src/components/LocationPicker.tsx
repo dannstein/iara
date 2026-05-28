@@ -65,7 +65,7 @@ export function LocationPicker({ value, onChange }: LocationPickerProps) {
               onClick={() => setMode(m.id)}
               className={cn(
                 'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors',
-                mode === m.id ? 'bg-brand-blue-soft text-white' : 'text-ink-muted hover:text-ink-secondary',
+                mode === m.id ? 'bg-brand-blue-soft text-ink-primary' : 'text-ink-muted hover:text-ink-secondary',
               )}
             >
               <Icon size={13} /> {m.label}
