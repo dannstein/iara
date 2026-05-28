@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: iara-api
+  docker:
+    compose:
+      enabled: true
+      file: docker-compose.yml
+      lifecycle-management: start-only  # não derruba os containers ao parar o Spring
+
+  # ============================================================
+  # Banco de dados
+  # ============================================================
+  datasource:
+    url: jdbc:postgresql://localhost:5432/iara_db
+    username: iara_user
+    password: iara_pass
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  # ============================================================
+  # JPA / Hibernate
+  # ============================================================
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # ============================================================
+  # Flyway — migrations
+  # ============================================================
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # ============================================================
+  # Redis
+  # ============================================================
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+
+  # ============================================================
+  # RabbitMQ
+  # ============================================================
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+# ============================================================
+# Servidor
+# ============================================================
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# ============================================================
+# LGPD — criptografia de campos sensíveis (AES-256)
+# A chave é lida da variável de ambiente IARA_ENCRYPTION_KEY
+# (Base64 de 32 bytes). Os AttributeConverter são instanciados
+# pelo Hibernate fora do contexto Spring, por isso usam env var
+# diretamente com fallback de desenvolvimento.
+# Gere uma chave de produção com:
+#   openssl rand -base64 32
+# ============================================================
+
+# ============================================================
+# JWT
+# Secret must be >= 64 characters for HS512 security.
+# Override JWT_SECRET environment variable in production.
+# ============================================================
+jwt:
+  secret: ${JWT_SECRET:iara-production-secret-key-replace-this-with-a-64-plus-char-random-value-from-env}
+  expiration-ms: 900000        # 15 minutes — access token
+  refresh-expiration-ms: 604800000  # 7 days — refresh token
+
+# ============================================================
+# Logs
+# ============================================================
+logging:
+  level:
+    br.com.iara: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO

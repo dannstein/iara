@@ -1,0 +1,264 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Tokens — IARA Design System Web (§1–§8)
+   ============================================================ */
+:root {
+  /* Backgrounds */
+  --bg-app: #070b14;
+  --bg-primary: #0c1220;
+  --bg-secondary: #111827;
+  --bg-elevated: #1a2332;
+  --bg-overlay: rgba(7, 11, 20, 0.85);
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(15, 71, 188, 0.12);
+
+  /* Brand */
+  --brand-blue-dark: #0f47bc;
+  --brand-blue-medium: #0d439a;
+  --brand-blue-light: #3b82f6;
+  --brand-blue-soft: rgba(15, 71, 188, 0.15);
+  --brand-blue-glow: rgba(15, 71, 188, 0.3);
+  --brand-white: #fefefe;
+
+  /* Texto */
+  --text-primary: #f0f4f8;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-disabled: rgba(148, 163, 184, 0.4);
+  --text-inverse: #fefefe;
+
+  /* Severidade */
+  --severity-critica: #ef4444;
+  --severity-alta: #f97316;
+  --severity-media: #eab308;
+  --severity-baixa: #22c55e;
+
+  /* Status */
+  --status-success: #22c55e;
+  --status-warning: #eab308;
+  --status-danger: #ef4444;
+  --status-info: #3b82f6;
+  --status-offline: #64748b;
+
+  /* START */
+  --start-vermelho: #ef4444;
+  --start-amarelo: #eab308;
+  --start-verde: #22c55e;
+  --start-preto: #374151;
+  --start-preto-text: #9ca3af;
+
+  /* Bordas */
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --border-brand: rgba(15, 71, 188, 0.4);
+  --border-focus: #0f47bc;
+
+  /* Fontes */
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Easing */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--border-default);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg-app);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  @media (min-width: 1920px) {
+    body {
+      font-size: 15px;
+    }
+  }
+}
+
+/* ============================================================
+   Keyframes (§8.3) — animation utilities vêm do tailwind.config
+   ============================================================ */
+@keyframes iara-fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes iara-slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes iara-pulse-critica {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2); }
+}
+@keyframes iara-pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px currentColor; }
+  50% { opacity: 0.6; box-shadow: 0 0 2px currentColor; }
+}
+@keyframes iara-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes iara-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ============================================================
+   Componentes utilitários (§2.3, §9)
+   ============================================================ */
+@layer components {
+  .eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted;
+  }
+  .kpi-number {
+    @apply text-[28px] font-bold leading-none text-ink-primary tabular-nums;
+  }
+  .data-mono {
+    font-family: var(--font-mono);
+    @apply text-[12px] font-medium text-brand-light;
+  }
+  .severity-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.08em];
+  }
+
+  /* Botões (§9.7) */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md text-[13px] font-semibold
+           transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand-dark text-brand-white border border-[rgba(15,71,188,0.5)]
+           px-5 py-2.5 hover:bg-brand-medium hover:shadow-[0_0_16px_rgba(15,71,188,0.35)]
+           active:scale-[0.98];
+  }
+  .btn-secondary {
+    @apply btn bg-white/[0.05] text-ink-secondary font-medium border border-white/10
+           px-4 py-2.5 hover:bg-white/[0.08] hover:text-ink-primary hover:border-white/[0.18];
+  }
+  .btn-danger {
+    @apply btn bg-[rgba(239,68,68,0.1)] text-severity-critica border border-[rgba(239,68,68,0.3)]
+           px-5 py-2.5 hover:bg-[rgba(239,68,68,0.18)] hover:border-[rgba(239,68,68,0.5)]
+           hover:shadow-[0_0_12px_rgba(239,68,68,0.2)];
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-muted font-medium border border-transparent
+           px-3 py-2 hover:bg-white/[0.04] hover:text-ink-secondary hover:border-white/[0.06];
+  }
+  .btn-icon {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md bg-white/[0.04]
+           border border-white/[0.06] text-ink-muted transition-all duration-150
+           hover:bg-white/[0.08] hover:text-ink-secondary hover:border-white/[0.12]
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  /* Inputs (§9.8) */
+  .input {
+    @apply w-full rounded-md bg-white/[0.04] border border-white/10 px-3 py-2.5
+           text-[14px] text-ink-primary outline-none transition-all duration-200
+           placeholder:text-ink-muted hover:border-white/[0.18]
+           focus:border-brand-dark focus:shadow-[0_0_0_3px_rgba(15,71,188,0.2)]
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .form-label {
+    @apply text-[12px] font-medium text-ink-secondary;
+  }
+  /* Dropdown nativo: as <option> herdam o tema do SO e ficam branco-no-branco.
+     Forçamos fundo escuro e texto claro para legibilidade. */
+  select.input option,
+  select option {
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+  }
+  .form-hint {
+    @apply text-[11px] text-ink-muted;
+  }
+  .form-error {
+    @apply flex items-center gap-1 text-[11px] text-severity-critica;
+  }
+
+  /* Skeleton (§9.13) */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded;
+  }
+
+  /* Gradient text (§7.2) */
+  .gradient-text-brand {
+    background: linear-gradient(135deg, #3b82f6 0%, #0f47bc 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .gradient-text-critica {
+    background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .pulse-dot {
+    @apply animate-pulse-dot;
+  }
+}
+
+/* Scrollbar (§9.15) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Leaflet — tema escuro para o mapa */
+.leaflet-container {
+  background: var(--bg-app);
+  font-family: var(--font-body);
+}
+.leaflet-control-attribution,
+.leaflet-control-zoom a {
+  background: var(--bg-secondary) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-default) !important;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: 8px;
+}

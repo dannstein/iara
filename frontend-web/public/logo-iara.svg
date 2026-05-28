@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iara-g" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#0F47BC"/>
+    </linearGradient>
+  </defs>
+  <path d="M16 2L28 8V16C28 23 22.6 28.7 16 30C9.4 28.7 4 23 4 16V8L16 2Z" fill="url(#iara-g)"/>
+  <path d="M16 9C13 13 11.5 16 11.5 18.5C11.5 21 13.5 23 16 23C18.5 23 20.5 21 20.5 18.5C20.5 16 19 13 16 9Z" fill="#FEFEFE"/>
+</svg>
