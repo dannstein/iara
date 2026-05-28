@@ -60,6 +60,9 @@ public class SolicitacaoServico {
     @Column(name = "observacao_dc", columnDefinition = "text")
     private String observacaoDc;
 
+    @Column(length = 20)
+    private String prioridade;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;
