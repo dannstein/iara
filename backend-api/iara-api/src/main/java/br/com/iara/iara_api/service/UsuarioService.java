@@ -96,10 +96,10 @@ public class UsuarioService {
                                        String senha, UUID tenantId, UUID idEspec,
                                        String docComprovacaoNumero, MultipartFile comprovante) {
         // RN24: especialidade + comprovação (número e arquivo) são obrigatórias
-        if (idEspec == null || docComprovacaoNumero == null || docComprovacaoNumero.isBlank()
-                || comprovante == null || comprovante.isEmpty()) {
+        // TODO: reativar "|| comprovante == null || comprovante.isEmpty()" quando o storage estiver configurado
+        if (idEspec == null || docComprovacaoNumero == null || docComprovacaoNumero.isBlank()) {
             throw new BusinessException(
-                    "RN24: técnico exige id_espec, doc_comprovacao_numero e o arquivo de comprovação");
+                    "RN24: técnico exige id_espec e doc_comprovacao_numero");
         }
         validarUnico(email, documento);
 
@@ -110,7 +110,9 @@ public class UsuarioService {
         Espec espec = especRepository.findById(idEspec)
                 .orElseThrow(() -> new NotFoundException("Especialidade não encontrada"));
 
-        String url = fileStorageService.store(comprovante, "comprovacoes");
+        // TODO: reativar quando o storage estiver configurado (remover null e descomentar a linha abaixo)
+        // String url = fileStorageService.store(comprovante, "comprovacoes");
+        String url = null;
 
         Usuario u = new Usuario();
         u.setNome(nome);
