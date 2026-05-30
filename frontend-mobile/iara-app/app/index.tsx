@@ -6,12 +6,14 @@ import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 
 // Importações novas para ligar com a API
-import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { api } from '../services/api';
 import * as SecureStore from 'expo-secure-store';
+import { useAppModal } from '../components/AppModal';
 
 export default function Index(){
     const { refresh } = useAuth();
+    const { show, modal } = useAppModal();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
@@ -19,7 +21,7 @@ export default function Index(){
     async function handleSignIn(){
         // 1. Validação básica antes de chamar o servidor
         if (!email || !password) {
-            Alert.alert("Atenção", "Preencha o e-mail e a senha.");
+            show({ type: 'warning', title: 'Atenção', message: 'Preencha o e-mail e a senha.' });
             return;
         }
 
@@ -55,7 +57,7 @@ export default function Index(){
             console.log("Erro da API:", error.response?.data);
             
             const mensagemErro = error.response?.data?.mensagem || "Não foi possível conectar ao servidor.";
-            Alert.alert("Erro no Login", mensagemErro);
+            show({ type: 'error', title: 'Erro no Login', message: mensagemErro });
         }
     }
     
@@ -66,7 +68,7 @@ export default function Index(){
         >
             <ScrollView contentContainerStyle={{flexGrow:1}} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                 <View style={styles.container}>
-                    
+                    {modal}
                     <View style={styles.header}>
                         <Image 
                             source={require("@/assets/images/logo.png")}

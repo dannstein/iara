@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -20,6 +19,7 @@ import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiCached, TTL } from '../lib/cache';
 import { api } from '../services/api';
+import { useAppModal } from '../components/AppModal';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -43,6 +43,13 @@ interface DemandaDTO {
   isActive: boolean;
 }
 
+interface EstoqueDTO {
+  id: string;
+  idTipo: string;
+  tipoNome: string;
+  quantidade: number;
+}
+
 // ── Cores por prioridade ─────────────────────────────────────
 
 const PRIORIDADE: Record<string, { color: string; label: string; bg: string }> = {
@@ -60,9 +67,11 @@ const PRIORIDADE_ORDER = ['CRITICA', 'ALTA', 'MEDIA', 'BAIXA', 'SUPRIDA'];
 export default function PontoColetaDetalhe() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { accessToken } = useAuth();
+  const { show, modal } = useAppModal();
 
   const [pc, setPc]             = useState<PcDTO | null>(null);
   const [demandas, setDemandas] = useState<DemandaDTO[]>([]);
+  const [estoque, setEstoque]   = useState<EstoqueDTO[]>([]);
   const [loading, setLoading]   = useState(true);
 
   // Modal de doação
@@ -79,9 +88,11 @@ export default function PontoColetaDetalhe() {
     Promise.all([
       apiCached<PcDTO>(`/pontos-coleta/${id}`, headers, TTL.pontos),
       apiCached<DemandaDTO[]>(`/pontos-coleta/${id}/demandas?is_active=true`, headers, TTL.pontos),
+      apiCached<EstoqueDTO[]>(`/pontos-coleta/${id}/estoque`, headers, TTL.pontos),
     ])
-      .then(([pcData, demData]) => {
+      .then(([pcData, demData, estData]) => {
         setPc(pcData);
+        setEstoque(estData);
         const sorted = [...demData].sort(
           (a, b) => PRIORIDADE_ORDER.indexOf(a.prioridade) - PRIORIDADE_ORDER.indexOf(b.prioridade),
         );
@@ -101,7 +112,7 @@ export default function PontoColetaDetalhe() {
     if (!demandaSelecionada || !id) return;
     const qty = parseInt(quantidade, 10);
     if (!qty || qty <= 0) {
-      Alert.alert('Atenção', 'Informe uma quantidade válida.');
+      show({ type: 'warning', title: 'Atenção', message: 'Informe uma quantidade válida.' });
       return;
     }
     setEnviando(true);
@@ -117,10 +128,10 @@ export default function PontoColetaDetalhe() {
         { headers },
       );
       setModalVisible(false);
-      Alert.alert('Doação registrada!', 'Obrigado pela sua contribuição. O ponto de coleta irá confirmar o recebimento.');
+      show({ type: 'success', title: 'Doação registrada!', message: 'Obrigado pela sua contribuição. O ponto de coleta irá confirmar o recebimento.' });
     } catch (err: any) {
       const msg = err?.response?.data?.mensagem ?? 'Erro ao registrar doação. Tente novamente.';
-      Alert.alert('Erro', msg);
+      show({ type: 'error', title: 'Erro', message: msg });
     } finally {
       setEnviando(false);
     }
@@ -144,6 +155,7 @@ export default function PontoColetaDetalhe() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {modal}
       <StatusBar style="dark" backgroundColor={Colors.neutral.gray} />
 
       {/* Header */}
@@ -188,8 +200,73 @@ export default function PontoColetaDetalhe() {
           </View>
         </View>
 
-        {/* Lista de demandas */}
-        <Text style={styles.sectionLabel}>O que mais precisam</Text>
+        {/* ── Mural de Necessidades ─────────────────────────── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>Mural de Necessidades</Text>
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/mural-necessidades', params: { id, pcNome: pc.pcNome } } as never)}
+            style={styles.verMaisBtn}
+          >
+            <Text style={styles.verMaisText}>Ver tudo</Text>
+            <Ionicons name="chevron-forward" size={13} color={Colors.blue.medium} />
+          </TouchableOpacity>
+        </View>
+
+        {demandas.filter(d => d.prioridade !== 'SUPRIDA').length === 0 ? (
+          <View style={styles.emptySection}>
+            <Ionicons name="checkmark-circle-outline" size={20} color="#22C55E" />
+            <Text style={styles.emptySectionText}>Nenhuma necessidade urgente no momento.</Text>
+          </View>
+        ) : (
+          <View style={styles.chipsWrap}>
+            {demandas.filter(d => d.prioridade !== 'SUPRIDA').slice(0, 6).map((d) => {
+              const cfg = PRIORIDADE[d.prioridade] ?? PRIORIDADE.BAIXA;
+              return (
+                <View key={d.id} style={[styles.chip, { backgroundColor: cfg.bg }]}>
+                  <Text style={[styles.chipText, { color: cfg.color }]}>{d.tipoNome}</Text>
+                  <View style={[styles.chipBadge, { backgroundColor: cfg.color + '22' }]}>
+                    <Text style={[styles.chipBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
+                  </View>
+                </View>
+              );
+            })}
+            {demandas.filter(d => d.prioridade !== 'SUPRIDA').length > 6 && (
+              <View style={[styles.chip, { backgroundColor: '#F1F5F9' }]}>
+                <Text style={[styles.chipText, { color: '#64748B' }]}>
+                  +{demandas.filter(d => d.prioridade !== 'SUPRIDA').length - 6} mais
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Inventário ────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Inventário</Text>
+
+        {estoque.length === 0 ? (
+          <View style={styles.emptySection}>
+            <Ionicons name="cube-outline" size={20} color="#94A3B8" />
+            <Text style={styles.emptySectionText}>Nenhum item registrado no estoque.</Text>
+          </View>
+        ) : (
+          <View style={styles.estoqueCard}>
+            {estoque.map((item, idx) => (
+              <View key={item.id}>
+                <View style={styles.estoqueRow}>
+                  <Ionicons name="cube-outline" size={15} color="#64748B" />
+                  <Text style={styles.estoqueNome}>{item.tipoNome}</Text>
+                  <View style={styles.estoqueQtdBadge}>
+                    <Text style={styles.estoqueQtd}>{item.quantidade}</Text>
+                  </View>
+                </View>
+                {idx < estoque.length - 1 && <View style={styles.estoqueDivider} />}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── Demandas detalhadas ───────────────────────────── */}
+        <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Contribuir</Text>
 
         {demandas.length === 0 ? (
           <View style={styles.center}>
@@ -327,6 +404,25 @@ const styles = StyleSheet.create({
   contactText:    { fontSize: 12, color: '#6B7280' },
 
   sectionLabel:   { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  sectionHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  verMaisBtn:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  verMaisText:    { fontSize: 12, color: Colors.blue.medium, fontWeight: '600' },
+
+  chipsWrap:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
+  chip:           { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5 },
+  chipText:       { fontSize: 12, fontWeight: '600' },
+  chipBadge:      { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  chipBadgeText:  { fontSize: 10, fontWeight: '700' },
+
+  emptySection:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 16 },
+  emptySectionText: { fontSize: 13, color: '#94A3B8' },
+
+  estoqueCard:    { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4, marginBottom: 16, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+  estoqueRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 11 },
+  estoqueNome:    { flex: 1, fontSize: 13, fontWeight: '500', color: '#1E293B' },
+  estoqueQtdBadge:{ backgroundColor: Colors.blue.dark + '15', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
+  estoqueQtd:     { fontSize: 13, fontWeight: '700', color: Colors.blue.dark },
+  estoqueDivider: { height: 1, backgroundColor: '#F1F5F9' },
 
   demandaCard: {
     backgroundColor: '#fff',

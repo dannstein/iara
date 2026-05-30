@@ -8,6 +8,7 @@ import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiCached, TTL } from '../lib/cache';
 import { api } from '../services/api';
+import { DonationPointCard } from '../components/DonationPointCard';
 
 interface PontoApoioDTO {
   id: string;
@@ -66,34 +67,16 @@ export default function PontosApoioScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetch(true); }} colors={[Colors.blue.dark]} />}
           ListEmptyComponent={<View style={styles.center}><Text style={styles.emptyText}>Nenhum ponto de apoio cadastrado.</Text></View>}
           renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{item.nome}</Text>
-              {item.descricao ? <Text style={styles.cardDesc} numberOfLines={2}>{item.descricao}</Text> : null}
-              {item.enderecoTxt ? (
-                <View style={styles.row}>
-                  <Ionicons name="location-outline" size={13} color="#64748B" />
-                  <Text style={styles.rowText}>{item.enderecoTxt}</Text>
-                </View>
-              ) : null}
-              {item.responsavel ? (
-                <View style={styles.row}>
-                  <Ionicons name="person-outline" size={13} color="#64748B" />
-                  <Text style={styles.rowText}>{item.responsavel}</Text>
-                </View>
-              ) : null}
-              {item.contato ? (
-                <View style={styles.row}>
-                  <Ionicons name="call-outline" size={13} color="#64748B" />
-                  <Text style={styles.rowText}>{item.contato}</Text>
-                </View>
-              ) : null}
-              {item.zonaRiscoNome ? (
-                <View style={[styles.row, styles.zonaTag]}>
-                  <Ionicons name="warning-outline" size={13} color="#F97316" />
-                  <Text style={styles.zonaText}>Zona: {item.zonaRiscoNome}</Text>
-                </View>
-              ) : null}
-            </View>
+            <DonationPointCard
+              title={item.nome}
+              type={item.zonaRiscoNome ? `Zona: ${item.zonaRiscoNome}` : undefined}
+              contato={item.contato}
+              endereco={item.enderecoTxt}
+              demandas={[]}
+              onPressDetails={() =>
+                router.push({ pathname: '/ponto-apoio-detalhe', params: { id: item.id } } as never)
+              }
+            />
           )}
         />
       )}
@@ -111,11 +94,4 @@ const styles = StyleSheet.create({
   list:        { paddingHorizontal: 16, paddingBottom: 100 },
   center:      { paddingTop: 60, alignItems: 'center' },
   emptyText:   { color: '#94A3B8', fontSize: 14 },
-  card:        { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, gap: 6 },
-  cardTitle:   { fontSize: 15, fontWeight: '700', color: '#1E293B' },
-  cardDesc:    { fontSize: 12, color: '#64748B', lineHeight: 17 },
-  row:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowText:     { fontSize: 12, color: '#64748B', flex: 1 },
-  zonaTag:     { backgroundColor: '#FFF7ED', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  zonaText:    { fontSize: 11, color: '#F97316', fontWeight: '600' },
 });

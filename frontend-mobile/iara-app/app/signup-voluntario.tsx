@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { 
-    View, 
-    Text, 
-    StyleSheet, 
-    KeyboardAvoidingView, 
-    Platform, 
-    ScrollView, 
-    TouchableOpacity, 
-    Modal, 
+    View,
+    Text,
+    StyleSheet,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    TouchableOpacity,
+    Modal,
     FlatList,
-    Alert
 } from 'react-native';
 import { router } from 'expo-router';
 import { Input } from "@/components/Input";
@@ -17,37 +16,39 @@ import { Button } from "@/components/Button";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../constants/theme';
 import * as DocumentPicker from 'expo-document-picker';
-import { api } from '../services/api'; // Importar api
+import { api } from '../services/api';
+import { useAppModal } from '../components/AppModal';
 
-// Lista de especialidades estática para simular a seleção (IDs fictícios estruturados que batem com as do banco)
 const ESPECIALIDADES_MOCK = [
     { id: '10000000-0000-0000-0000-000000000101', nome: 'Médico Clínico Geral' },
-    { id: '10000000-0000-0000-0000-000000000102', nome: 'Médico de Emergência' },
-    { id: '10000000-0000-0000-0000-000000000103', nome: 'Enfermeiro' },
-    { id: '10000000-0000-0000-0000-000000000104', nome: 'Técnico de Enfermagem' },
-    { id: '10000000-0000-0000-0000-000000000105', nome: 'Bombeiro Civil' },
-    { id: '10000000-0000-0000-0000-000000000106', nome: 'Socorrista' },
+    { id: '10000000-0000-0000-0000-000000000102', nome: 'Médico Pediatra' },
+    { id: '10000000-0000-0000-0000-000000000103', nome: 'Médico de Emergência' },
+    { id: '10000000-0000-0000-0000-000000000104', nome: 'Enfermeiro' },
+    { id: '10000000-0000-0000-0000-000000000105', nome: 'Técnico de Enfermagem' },
+    { id: '10000000-0000-0000-0000-000000000106', nome: 'Farmacêutico' },
     { id: '10000000-0000-0000-0000-000000000107', nome: 'Psicólogo' },
     { id: '10000000-0000-0000-0000-000000000108', nome: 'Assistente Social' },
     { id: '10000000-0000-0000-0000-000000000109', nome: 'Engenheiro Civil' },
     { id: '10000000-0000-0000-0000-000000000110', nome: 'Geólogo' },
-    { id: '10000000-0000-0000-0000-000000000111', nome: 'Motorista' },
-    { id: '10000000-0000-0000-0000-000000000112', nome: 'Operador de Barco' },
-    { id: '10000000-0000-0000-0000-000000000113', nome: 'Logístico' },
+    { id: '10000000-0000-0000-0000-000000000111', nome: 'Bombeiro Civil' },
+    { id: '10000000-0000-0000-0000-000000000112', nome: 'Socorrista' },
+    { id: '10000000-0000-0000-0000-000000000113', nome: 'Motorista' },
+    { id: '10000000-0000-0000-0000-000000000114', nome: 'Operador de Barco' },
+    { id: '10000000-0000-0000-0000-000000000115', nome: 'Logístico' },
 ];
 
 export default function SignupVoluntario() {
+    const { show, modal } = useAppModal();
     const [nome, setNome] = useState("");
     const [email, setEmail] = useState("");
     const [telefone, setTelefone] = useState("");
     const [documento, setDocumento] = useState(""); // CPF
     const [senha, setSenha] = useState("");
     const [registro, setRegistro] = useState(""); // docComprovacaoNumero
-    const [especialidade, setEspecialidade] = useState<{ id: string, nome: string } | null>(null);
+    const [especialidade, setEspecialidade] = useState<{ id: string; nome: string } | null>(null);
     const [comprovante, setComprovante] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
 
-    // Função para buscar o comprovante usando o expo-document-picker
     async function handlePickDocument() {
         try {
             const result = await DocumentPicker.getDocumentAsync({
@@ -60,57 +61,54 @@ export default function SignupVoluntario() {
             }
         } catch (error) {
             console.error("Erro ao selecionar o comprovante:", error);
-            Alert.alert("Erro", "Ocorreu um erro ao tentar selecionar o comprovante.");
+            show({ type: 'error', title: 'Erro', message: 'Ocorreu um erro ao tentar selecionar o comprovante.' });
         }
     }
 
     async function handleRegister() {
-        // Validação básica local
         if (!nome || !email || !telefone || !documento || !senha || !registro || !especialidade) {
-            Alert.alert("Campos obrigatórios", "Por favor, preencha todos os campos.");
+            show({ type: 'warning', title: 'Campos obrigatórios', message: 'Por favor, preencha todos os campos.' });
             return;
         }
-
         try {
-            // Montagem do FormData para multipart/form-data
             const formData = new FormData();
             formData.append('nome', nome);
             formData.append('email', email);
             formData.append('telefone', telefone);
             formData.append('documento', documento);
             formData.append('senha', senha);
-            formData.append('tenantId', '00000000-0000-0000-0000-000000000001'); // Tenant Federal por padrão
+            formData.append('tenantId', '00000000-0000-0000-0000-000000000001');
             formData.append('idEspec', especialidade.id);
             formData.append('docComprovacaoNumero', registro);
+            // doc_comprovacao desabilitado temporariamente — banco sem suporte a arquivos no momento
 
-            // O comprovante não está sendo enviado por enquanto conforme solicitado
-            
             console.log("=== ENVIANDO CADASTRO TÉCNICO / VOLUNTÁRIO ===");
-            
+
             const response = await api.post('/usuarios/cadastro/tecnico', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
 
             console.log("Cadastro técnico pendente de aprovação:", response.data);
-            
-            Alert.alert(
-                "Cadastro Enviado",
-                "Seu cadastro foi enviado e está pendente de aprovação pela Defesa Civil. Você receberá uma notificação quando for aprovado.",
-                [{ text: "OK", onPress: () => router.replace("/") }]
-            );
+
+            show({
+                type: 'success',
+                title: 'Cadastro Enviado',
+                message: 'Seu cadastro está pendente de aprovação pela Defesa Civil. Você receberá uma notificação quando for aprovado.',
+                confirmLabel: 'OK',
+                onConfirm: () => router.replace("/"),
+            });
 
         } catch (error: any) {
             console.error("Erro no cadastro de técnico:", error.response?.data || error.message);
             const errorMessage = error.response?.data?.mensagem || "Não foi possível realizar o cadastro.";
-            Alert.alert("Erro no Cadastro", errorMessage);
+            show({ type: 'error', title: 'Erro no Cadastro', message: errorMessage });
         }
     }
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView 
+            {modal}
+            <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.select({ ios: "padding", android: "height" })}
             >
@@ -181,7 +179,7 @@ export default function SignupVoluntario() {
                             activeOpacity={0.7}
                         >
                             <Text style={styles.documentButtonText}>
-                                {comprovante ? "✓ Alterar Comprovante Anexado" : "Anexar Comprovante Técnico (PDF/Imagem)"}
+                                {comprovante ? "Alterar Comprovante Anexado" : "Anexar Comprovante Técnico (PDF/Imagem)"}
                             </Text>
                         </TouchableOpacity>
                         */}
@@ -364,6 +362,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
         maxHeight: '70%',
+        flex: 1,
     },
     modalHeader: {
         flexDirection: 'row',

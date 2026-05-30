@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
+import { useAppModal } from '../../components/AppModal';
 
 // ── Labels de cargo ───────────────────────────────────────────
 
@@ -63,6 +63,7 @@ interface TenantDTO {
 
 export default function Profile() {
   const { accessToken, role, tenantId } = useAuth();
+  const { show, modal } = useAppModal();
 
   const [usuario, setUsuario] = useState<UsuarioDTO | null>(null);
   const [tenant,  setTenant ] = useState<TenantDTO  | null>(null);
@@ -89,19 +90,18 @@ export default function Profile() {
     }
   }, [accessToken, headers, tenantId]);
 
-  async function handleLogout() {
-    Alert.alert('Sair da conta', 'Tem certeza que deseja sair?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair',
-        style: 'destructive',
-        onPress: async () => {
-          await SecureStore.deleteItemAsync('accessToken');
-          await SecureStore.deleteItemAsync('userData');
-          router.replace('/');
-        },
+  function handleLogout() {
+    show({
+      type: 'confirm',
+      title: 'Sair da conta',
+      message: 'Tem certeza que deseja sair?',
+      confirmLabel: 'Sair',
+      onConfirm: async () => {
+        await SecureStore.deleteItemAsync('accessToken');
+        await SecureStore.deleteItemAsync('userData');
+        router.replace('/');
       },
-    ]);
+    });
   }
 
   const nome       = usuario?.nome  ?? '';
@@ -120,6 +120,7 @@ export default function Profile() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" backgroundColor={Colors.neutral.gray} />
 
+      {modal}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

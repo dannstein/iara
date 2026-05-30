@@ -50,7 +50,8 @@ public class UsuarioController {
             @RequestParam UUID tenantId,
             @RequestParam UUID idEspec,
             @RequestParam String docComprovacaoNumero,
-            @RequestPart("doc_comprovacao") MultipartFile comprovante) {
+            // TODO: voltar para required = true quando o storage de arquivos estiver configurado
+            @RequestPart(value = "doc_comprovacao", required = false) MultipartFile comprovante) {
         UsuarioDTO dto = service.cadastrarTecnico(nome, email, telefone, documento, senha,
                 tenantId, idEspec, docComprovacaoNumero, comprovante);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(dto);

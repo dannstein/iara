@@ -30,12 +30,9 @@ const TAB_TITLES: Record<string, string> = {
   profile: 'Perfil',
 };
 
-// Fallback mínimo para null role — evita mostrar abas indevidas durante race condition pós-login
-const SAFE_FALLBACK: readonly string[] = ['home', 'profile'];
-
 function getVisibleTabs(role: UserRole): readonly string[] {
-  if (!role) return SAFE_FALLBACK;
-  return TABS_BY_ROLE[role] ?? SAFE_FALLBACK;
+  if (!role) return [];
+  return TABS_BY_ROLE[role] ?? [];
 }
 
 // ── Layout ───────────────────────────────────────────────────
@@ -47,6 +44,7 @@ export default function TabLayout() {
 
   return (
     <SwipeableTabs
+      key={role ?? 'loading'}
       tabBarPosition="bottom"
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
@@ -54,11 +52,14 @@ export default function TabLayout() {
         animationEnabled: true,
       }}
     >
-      {(ALL_TABS as readonly string[]).filter((tab) => visibleTabs.includes(tab)).map((tab) => (
+      {(ALL_TABS as readonly string[]).map((tab) => (
         <SwipeableTabs.Screen
           key={tab}
           name={tab}
-          options={{ title: TAB_TITLES[tab] }}
+          options={{
+            title: TAB_TITLES[tab],
+            href: visibleTabs.includes(tab) ? undefined : null,
+          }}
         />
       ))}
     </SwipeableTabs>

@@ -11,7 +11,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Colors } from '../../constants/theme';
+import { ChipBar, type ChipOption } from '../../components/ChipBar';
 import { useAuth } from '../../context/AuthContext';
 import { apiCached, TTL } from '../../lib/cache';
 import { api } from '../../services/api';
@@ -55,6 +57,8 @@ const FILTER_CHIPS = [
 ] as const;
 
 type FilterKey = typeof FILTER_CHIPS[number]['key'];
+
+const CHIP_OPTIONS: ChipOption[] = FILTER_CHIPS.map((c) => ({ key: c.key, label: c.label }));
 
 function relativeDate(iso: string): string {
   try {
@@ -124,20 +128,12 @@ export default function Events() {
       </View>
 
       {/* Chips de filtro */}
-      <View style={styles.chipsRow}>
-        {FILTER_CHIPS.map((chip) => (
-          <TouchableOpacity
-            key={chip.key}
-            style={[styles.chip, filter === chip.key && styles.chipActive]}
-            onPress={() => setFilter(chip.key)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.chipText, filter === chip.key && styles.chipTextActive]}>
-              {chip.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ChipBar
+        options={CHIP_OPTIONS}
+        selected={filter}
+        onChange={(key) => setFilter(key as FilterKey)}
+        style={styles.chipBarWrap}
+      />
 
       {loading ? (
         <View style={styles.center}>
@@ -158,7 +154,14 @@ export default function Events() {
               <Text style={styles.emptyText}>Nenhum evento neste filtro.</Text>
             </View>
           }
-          renderItem={({ item }) => <EventCard evento={item} />}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/evento-detalhe', params: { id: item.id } } as never)}
+              activeOpacity={0.85}
+            >
+              <EventCard evento={item} />
+            </TouchableOpacity>
+          )}
         />
       )}
     </SafeAreaView>
@@ -203,11 +206,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '800', color: Colors.blue.dark, flex: 1 },
   countBadge:  { backgroundColor: Colors.blue.dark, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
   countText:   { color: '#fff', fontSize: 12, fontWeight: '700' },
-  chipsRow:    { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10, flexWrap: 'wrap' },
-  chip:        { backgroundColor: '#F1F5F9', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20 },
-  chipActive:  { backgroundColor: Colors.blue.dark },
-  chipText:    { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  chipTextActive: { color: '#fff' },
+  chipBarWrap: { paddingVertical: 10 },
   listContent: { paddingHorizontal: 16, paddingBottom: 100 },
   centerFlex:  { flex: 1 },
   center:      { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },

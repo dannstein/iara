@@ -108,6 +108,10 @@ export default function HospitaisScreen() {
                     <Text style={styles.statText}>{item.contato}</Text>
                   </View>
                 ) : null}
+                <TouchableOpacity style={styles.detailsBtn} activeOpacity={0.8}>
+                  <Text style={styles.detailsBtnText}>Ver detalhes</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#fff" />
+                </TouchableOpacity>
               </View>
             );
           }}
@@ -127,9 +131,9 @@ const styles = StyleSheet.create({
   list:        { paddingHorizontal: 16, paddingBottom: 100 },
   center:      { paddingTop: 60, alignItems: 'center' },
   emptyText:   { color: '#94A3B8', fontSize: 14 },
-  card:        { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, gap: 8 },
+  card:        { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, gap: 12 },
   cardTop:     { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  cardTitle:   { fontSize: 15, fontWeight: '700', color: '#1E293B' },
+  cardTitle:   { fontSize: 15, fontWeight: '700', color: Colors.blue.dark },
   tipoBadge:   { borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
   tipoText:    { fontSize: 11, fontWeight: '700' },
   campBadge:   { backgroundColor: '#F97316', borderRadius: 20, paddingHorizontal: 9, paddingVertical: 3 },
@@ -137,4 +141,6 @@ const styles = StyleSheet.create({
   statsRow:    { flexDirection: 'row', gap: 16, flexWrap: 'wrap' },
   stat:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statText:    { fontSize: 12, color: '#64748B' },
+  detailsBtn:  { backgroundColor: Colors.blue.dark, borderRadius: 12, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  detailsBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

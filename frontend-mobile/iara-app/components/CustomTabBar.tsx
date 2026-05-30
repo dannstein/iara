@@ -6,11 +6,11 @@ import { Colors } from '../constants/theme';
 export function CustomTabBar({ state, descriptors, navigation }: any) {
   return (
     <View style={styles.container}>
-      {state.routes.map((route: any, index: number) => {
+      {state.routes.filter((route: any) => descriptors[route.key].options.href !== null).map((route: any) => {
         const { options } = descriptors[route.key];
         const label = options.title !== undefined ? options.title : route.name;
-        
-        const isFocused = state.index === index;
+
+        const isFocused = state.routes[state.index]?.key === route.key;
 
         const onPress = () => {
           const event = navigation.emit({

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -6,13 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { apiCached } from '../lib/cache';
+import { apiCached, TTL } from '../lib/cache';
 import {
   LeafletMap,
   type MapMarker,
   type MapCircle,
   type MapPolygon,
 } from '../components/LeafletMap';
+import { ChipBar, type ChipOption } from '../components/ChipBar';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -42,6 +43,29 @@ interface ZonaRiscoDTO {
   isActive: boolean;
 }
 
+interface PontoApoioDTO {
+  id: string;
+  nome: string;
+  coordenadas: { lat: number; lng: number };
+  enderecoTxt?: string;
+  isActive: boolean;
+}
+
+const DOADOR_ROLES = new Set(['DOADOR', 'USUARIO_SIMPLES']);
+
+const DOADOR_CHIPS: ChipOption[] = [
+  { key: 'eventos',       label: 'Eventos'           },
+  { key: 'pontos-coleta', label: 'Pontos de Coleta'  },
+  { key: 'zonas-risco',   label: 'Zonas de Risco'    },
+];
+
+const STAFF_CHIPS: ChipOption[] = [
+  { key: 'eventos',       label: 'Eventos'           },
+  { key: 'pontos-coleta', label: 'Pontos de Coleta'  },
+  { key: 'zonas-risco',   label: 'Zonas de Risco'    },
+  { key: 'pontos-apoio',  label: 'Pontos de Apoio'   },
+];
+
 // ── Helpers ───────────────────────────────────────────────────
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -64,11 +88,18 @@ const ZONA_COLOR = (nivel: number) =>
 //   • Pontos de coleta ativos — markers azuis
 
 export default function MapaFullscreen() {
-  const { accessToken } = useAuth();
+  const { accessToken, role } = useAuth();
+  const isDoador = DOADOR_ROLES.has(role ?? '');
+  const chips    = isDoador ? DOADOR_CHIPS : STAFF_CHIPS;
 
-  const [eventos, setEventos] = useState<EventoDTO[]>([]);
-  const [pcs,     setPcs    ] = useState<PcDTO[]>([]);
-  const [zonas,   setZonas  ] = useState<ZonaRiscoDTO[]>([]);
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(
+    () => new Set(chips.map((c) => c.key)),
+  );
+
+  const [eventos,     setEventos    ] = useState<EventoDTO[]>([]);
+  const [pcs,         setPcs        ] = useState<PcDTO[]>([]);
+  const [zonas,       setZonas      ] = useState<ZonaRiscoDTO[]>([]);
+  const [pontosApoio, setPontosApoio] = useState<PontoApoioDTO[]>([]);
 
   const headers = useMemo(
     () => ({ Authorization: `Bearer ${accessToken}` }),
@@ -78,62 +109,77 @@ export default function MapaFullscreen() {
   useEffect(() => {
     if (!accessToken) return;
 
-    apiCached<EventoDTO[]>('/eventos', headers)
+    apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers, TTL.pontos)
+      .then(setPcs).catch(() => {});
+
+    apiCached<ZonaRiscoDTO[]>('/zonas-risco', headers, TTL.zonas)
+      .then((data) => setZonas(data.filter((z) => z.isActive))).catch(() => {});
+
+    apiCached<EventoDTO[]>('/eventos', headers, TTL.eventos)
       .then((data) =>
         setEventos(data.filter((e) => e.status !== 'ENCERRADO' && e.status !== 'CANCELADO')),
-      )
-      .catch(() => {});
+      ).catch(() => {});
 
-    apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers)
-      .then(setPcs)
-      .catch(() => {});
+    if (!isDoador) {
+      apiCached<PontoApoioDTO[]>('/pontos-apoio', headers, TTL.pontos)
+        .then((data) => setPontosApoio(data.filter((p) => p.isActive))).catch(() => {});
+    }
+  }, [accessToken, headers, isDoador]);
 
-    apiCached<ZonaRiscoDTO[]>('/zonas-risco', headers)
-      .then((data) => setZonas(data.filter((z) => z.isActive)))
-      .catch(() => {});
-  }, [accessToken, headers]);
+  const toggleFilter = useCallback((key: string) => {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
-  // Markers: epicentros de eventos + pontos de coleta
+  const handleMarkerPress = useCallback((data: { route: string; id: string }) => {
+    router.push({ pathname: data.route, params: { id: data.id } } as never);
+  }, []);
+
   const markers: MapMarker[] = useMemo(() => [
-    ...eventos.map((ev) => ({
-      lat:         ev.coordenadas.lat,
-      lng:         ev.coordenadas.lng,
-      color:       SEVERITY_COLOR[ev.severidade] ?? '#64748B',
-      title:       ev.titulo,
-      description: ev.tipoNome,
-    })),
-    ...pcs.map((pc) => ({
-      lat:         pc.coordenadas.lat,
-      lng:         pc.coordenadas.lng,
-      color:       Colors.blue.dark,
-      title:       pc.pcNome,
-      description: pc.pcDesc,
-    })),
-  ], [eventos, pcs]);
+    ...(activeFilters.has('pontos-coleta') ? pcs.map((pc) => ({
+      lat: pc.coordenadas.lat, lng: pc.coordenadas.lng,
+      color: Colors.blue.dark, title: pc.pcNome, description: pc.pcDesc,
+      id: pc.id, route: '/ponto-coleta-detalhe',
+    })) : []),
+    ...(activeFilters.has('eventos') ? eventos.map((ev) => ({
+      lat: ev.coordenadas.lat, lng: ev.coordenadas.lng,
+      color: SEVERITY_COLOR[ev.severidade] ?? '#64748B',
+      title: ev.titulo, description: ev.tipoNome,
+      id: ev.id, route: '/evento-detalhe',
+    })) : []),
+    ...(activeFilters.has('pontos-apoio') ? pontosApoio.map((p) => ({
+      lat: p.coordenadas.lat, lng: p.coordenadas.lng,
+      color: '#F97316', title: p.nome, description: p.enderecoTxt,
+      id: p.id, route: '/ponto-apoio-detalhe',
+    })) : []),
+  ], [pcs, eventos, pontosApoio, activeFilters]);
 
-  // Círculos: raio de eventos + zonas ponto+raio
   const circles: MapCircle[] = useMemo(() => [
-    ...eventos.filter((ev) => !!ev.raioMetros).map((ev) => ({
-      lat:    ev.coordenadas.lat,
-      lng:    ev.coordenadas.lng,
-      radius: ev.raioMetros!,
-      color:  SEVERITY_COLOR[ev.severidade] ?? '#64748B',
-    })),
-    ...zonas.filter((z) => !!z.coordenadas && !!z.raioMetros).map((z) => ({
-      lat:    z.coordenadas!.lat,
-      lng:    z.coordenadas!.lng,
-      radius: z.raioMetros!,
-      color:  ZONA_COLOR(z.nivelRisco),
-    })),
-  ], [eventos, zonas]);
+    ...(activeFilters.has('zonas-risco')
+      ? zonas.filter((z) => !!z.coordenadas && !!z.raioMetros).map((z) => ({
+          lat: z.coordenadas!.lat, lng: z.coordenadas!.lng,
+          radius: z.raioMetros!, color: ZONA_COLOR(z.nivelRisco),
+        }))
+      : []),
+    ...(activeFilters.has('eventos')
+      ? eventos.filter((ev) => !!ev.raioMetros).map((ev) => ({
+          lat: ev.coordenadas.lat, lng: ev.coordenadas.lng,
+          radius: ev.raioMetros!, color: SEVERITY_COLOR[ev.severidade] ?? '#64748B',
+        }))
+      : []),
+  ], [zonas, eventos, activeFilters]);
 
-  // Polígonos: zonas de risco com geometria GeoJSON
   const polygons: MapPolygon[] = useMemo(() =>
-    zonas.filter((z) => !!z.geometria && !z.raioMetros).map((z) => ({
-      geojson: z.geometria!,
-      color:   ZONA_COLOR(z.nivelRisco),
-    })),
-    [zonas],
+    activeFilters.has('zonas-risco')
+      ? zonas.filter((z) => !!z.geometria && !z.raioMetros).map((z) => ({
+          geojson: z.geometria!, color: ZONA_COLOR(z.nivelRisco),
+        }))
+      : [],
+    [zonas, activeFilters],
   );
 
   return (
@@ -145,26 +191,40 @@ export default function MapaFullscreen() {
         markers={markers}
         circles={circles}
         polygons={polygons}
+        onMarkerPress={handleMarkerPress}
       />
 
-      {/* Overlay: botão fechar + título */}
+      {/* Overlay: botão fechar + título + chips */}
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
-        <View style={styles.header} pointerEvents="box-none">
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={() => router.back()}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close" size={20} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.titlePill}>
-            <Text style={styles.titleText}>Mapa de Ocorrências</Text>
+        <View pointerEvents="box-none">
+          <View style={styles.header} pointerEvents="box-none">
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => router.back()}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close" size={20} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.titlePill}>
+              <Text style={styles.titleText}>Mapa de Ocorrências</Text>
+            </View>
+          </View>
+
+          {/* Chips de filtro */}
+          <View style={styles.chipsWrapper} pointerEvents="box-none">
+            <ChipBar
+              options={chips}
+              selectedKeys={[...activeFilters]}
+              onToggle={toggleFilter}
+            />
           </View>
         </View>
 
         {/* Legenda */}
         <View style={styles.legendContainer} pointerEvents="none">
-          {Object.entries(SEVERITY_COLOR).map(([key, color]) => (
+          <LegendItem color={Colors.blue.dark} label="Ponto de coleta" />
+          <LegendItem color="#F97316" label="Ponto de apoio" />
+          {!isDoador && Object.entries(SEVERITY_COLOR).map(([key, color]) => (
             <LegendItem
               key={key}
               color={color}
@@ -175,7 +235,6 @@ export default function MapaFullscreen() {
               }
             />
           ))}
-          <LegendItem color={Colors.blue.dark} label="Ponto de coleta" />
         </View>
       </SafeAreaView>
     </View>
@@ -207,6 +266,18 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
     paddingTop: 12,
+  },
+  chipsWrapper: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 24,
+    marginHorizontal: 12,
+    paddingVertical: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
   },
   closeBtn: {
     width: 40, height: 40, borderRadius: 20,

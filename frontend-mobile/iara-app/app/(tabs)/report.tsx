@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { Colors } from '../../constants/theme';
 

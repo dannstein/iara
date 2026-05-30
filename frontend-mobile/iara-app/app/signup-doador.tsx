@@ -7,16 +7,17 @@ import {
     Platform,
     ScrollView,
     TouchableOpacity,
-    Alert // Importar Alert para feedback de erro
 } from 'react-native';
 import { router } from 'expo-router';
 import { Input } from "@/components/Input";
 import { Button } from "@/components/Button";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api } from '../services/api'; // Importar a instância do Axios
-import * as SecureStore from 'expo-secure-store'; // Importar SecureStore
+import { api } from '../services/api';
+import * as SecureStore from 'expo-secure-store';
+import { useAppModal } from '../components/AppModal';
 
 export default function SignupDoador() {
+    const { show, modal } = useAppModal();
     const [nome, setNome] = useState("");
     const [email, setEmail] = useState("");
     const [telefone, setTelefone] = useState("");
@@ -25,7 +26,7 @@ export default function SignupDoador() {
 
     async function handleRegister() {
         if (!nome || !email || !telefone || !documento || !senha) {
-            Alert.alert("Campos obrigatórios", "Por favor, preencha todos os campos.");
+            show({ type: 'warning', title: 'Campos obrigatórios', message: 'Por favor, preencha todos os campos.' });
             return;
         }
 
@@ -36,7 +37,7 @@ export default function SignupDoador() {
                 telefone,
                 documento,
                 senha,
-                tenantId: '00000000-0000-0000-0000-000000000001', // Tenant Federal
+                tenantId: '00000000-0000-0000-0000-000000000001',
             });
 
             const { accessToken, role } = response.data;
@@ -45,18 +46,24 @@ export default function SignupDoador() {
             await SecureStore.setItemAsync('userData', JSON.stringify(response.data));
 
             console.log(`Cadastro de Doador e Login realizado! Perfil: ${role}`);
-            Alert.alert("Sucesso", "Cadastro realizado com sucesso!");
-            router.replace("/(tabs)/home"); // Redirecionar após o cadastro e login
+            show({
+                type: 'success',
+                title: 'Conta criada!',
+                message: 'Cadastro realizado com sucesso.',
+                confirmLabel: 'Entrar',
+                onConfirm: () => router.replace("/(tabs)/home"),
+            });
 
         } catch (error: any) {
             console.error("Erro no cadastro de doador:", error.response?.data || error.message);
             const errorMessage = error.response?.data?.mensagem || "Não foi possível realizar o cadastro.";
-            Alert.alert("Erro no Cadastro", errorMessage);
+            show({ type: 'error', title: 'Erro no Cadastro', message: errorMessage });
         }
     }
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            {modal}
             <KeyboardAvoidingView 
                 style={{ flex: 1 }}
                 behavior={Platform.select({ ios: "padding", android: "height" })}

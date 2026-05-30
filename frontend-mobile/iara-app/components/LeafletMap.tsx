@@ -12,6 +12,8 @@ export interface MapMarker {
   color: string;
   title?: string;
   description?: string;
+  id?: string;
+  route?: string;
 }
 
 export interface MapCircle {
@@ -35,6 +37,7 @@ interface LeafletMapProps {
   polygons?: MapPolygon[];
   center?: { lat: number; lng: number };
   zoom?: number;
+  onMarkerPress?: (data: { route: string; id: string }) => void;
 }
 
 // ── HTML estático ─────────────────────────────────────────────
@@ -100,7 +103,14 @@ const LEAFLET_HTML = `<!DOCTYPE html>
       });
       var mk = L.marker([m.lat, m.lng], {icon:icon}).addTo(markerLayer);
       if (m.title) {
-        mk.bindPopup(m.description ? '<b>' + m.title + '</b><br>' + m.description : '<b>' + m.title + '</b>');
+        var pop = '<div style="font-family:system-ui,sans-serif;padding:2px;min-width:130px;">';
+        pop += '<b style="font-size:13px;color:#1E293B;display:block;margin-bottom:2px;">' + m.title + '</b>';
+        if (m.description) { pop += '<span style="font-size:11px;color:#64748B;">' + m.description + '</span>'; }
+        if (m.route && m.id) {
+          pop += '<button data-route="' + m.route + '" data-id="' + m.id + '" onclick="if(window.ReactNativeWebView){window.ReactNativeWebView.postMessage(JSON.stringify({route:this.dataset.route,id:this.dataset.id}))}return false;" style="display:block;margin-top:8px;width:100%;background:#1B3A5E;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.3px;">Ver Detalhes ›</button>';
+        }
+        pop += '</div>';
+        mk.bindPopup(pop, { maxWidth: 220, closeButton: true });
       }
     });
 
@@ -111,6 +121,23 @@ const LEAFLET_HTML = `<!DOCTYPE html>
       map.fitBounds(L.latLngBounds(pts).pad(0.25));
     }
   };
+
+  // Auto-open popup on high zoom: when zoom >= 15, open the popup
+  // of the marker closest to the map centre (if within 100 screen-px).
+  map.on('zoomend', function() {
+    var zoom = map.getZoom();
+    if (zoom < 15) { map.closePopup(); return; }
+    var ctr   = map.getSize().divideBy(2);
+    var best  = null;
+    var bestD = Infinity;
+    markerLayer.eachLayer(function(layer) {
+      if (!layer.getPopup || !layer.getPopup()) return;
+      var pt = map.latLngToContainerPoint(layer.getLatLng());
+      var d  = Math.sqrt(Math.pow(pt.x - ctr.x, 2) + Math.pow(pt.y - ctr.y, 2));
+      if (d < bestD) { bestD = d; best = layer; }
+    });
+    if (best && bestD < 100 && !best.isPopupOpen()) { best.openPopup(); }
+  });
 </script>
 </body>
 </html>`;
@@ -122,9 +149,17 @@ export function LeafletMap({
   markers  = [],
   circles  = [],
   polygons = [],
+  onMarkerPress,
 }: LeafletMapProps) {
   const webViewRef   = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
+
+  const onMessage = useCallback((event: { nativeEvent: { data: string } }) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.route && data.id) onMarkerPress?.(data);
+    } catch {}
+  }, [onMarkerPress]);
 
   const injectData = useCallback((m: MapMarker[], c: MapCircle[], p: MapPolygon[]) => {
     if (!webViewRef.current) return;
@@ -163,6 +198,7 @@ export function LeafletMap({
           source={{ html: LEAFLET_HTML }}
           style={styles.webview}
           onLoadEnd={onLoadEnd}
+          onMessage={onMessage}
           bounces={false}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
