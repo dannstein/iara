@@ -95,7 +95,18 @@ export function EmRiscoTab() {
   }
 
   if (isError) {
-    return <ErrorState onRetry={refetch} />;
+    return (
+      <ErrorState
+        action={
+          <button
+            onClick={() => refetch()}
+            className="btn-secondary"
+          >
+            Tentar novamente
+          </button>
+        }
+      />
+    );
   }
 
   const zonas = data?.zonas ?? [];

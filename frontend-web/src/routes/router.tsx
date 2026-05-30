@@ -14,6 +14,11 @@ import { UsuariosPage } from '@/pages/Usuarios/UsuariosPage';
 import { ZonasRiscoPage } from '@/pages/ZonasRisco/ZonasRiscoPage';
 import { PontosApoioPage } from '@/pages/PontosApoio/PontosApoioPage';
 import { PrevencaoPage } from '@/pages/Prevencao/PrevencaoPage';
+import { AlertasCommandCenter } from '@/pages/Alertas/AlertasCommandCenter';
+import { NovoAlertaPage } from '@/pages/Alertas/NovoAlertaPage';
+import { AlertaDetailPage } from '@/pages/Alertas/AlertaDetailPage';
+import { AgendamentosPage } from '@/pages/Alertas/AgendamentosPage';
+import { NovoAgendamentoPage } from '@/pages/Alertas/NovoAgendamentoPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
@@ -37,6 +42,11 @@ export const router = createBrowserRouter([
           { path: 'usuarios', element: <UsuariosPage /> },
           { path: 'zonas-risco', element: <ZonasRiscoPage /> },
           { path: 'tenants', element: <TenantsPage /> },
+          { path: 'alertas', element: <AlertasCommandCenter /> },
+          { path: 'alertas/novo', element: <NovoAlertaPage /> },
+          { path: 'alertas/agendamentos', element: <AgendamentosPage /> },
+          { path: 'alertas/agendamentos/novo', element: <NovoAgendamentoPage /> },
+          { path: 'alertas/:id', element: <AlertaDetailPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

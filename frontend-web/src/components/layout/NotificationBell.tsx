@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bell, CheckCheck } from 'lucide-react';
+import { Bell, CheckCheck, Siren } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { cn, formatRelative } from '@/lib/utils';
 import {
   useNaoLidasCount,
@@ -11,10 +12,21 @@ import {
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { data: count = 0 } = useNaoLidasCount();
   const { data: notificacoes = [] } = useNotificacoes();
   const marcarLida = useMarcarLida();
   const marcarTodas = useMarcarTodasLidas();
+
+  function handleClick(n: (typeof notificacoes)[number]) {
+    if (!n.lida) marcarLida.mutate(n.id);
+    setOpen(false);
+    if (n.tipo === 'ALERTA' && n.idRef) {
+      navigate(`/alertas/${n.idRef}`);
+    } else if (n.tipo === 'EVENTO' && n.idRef) {
+      navigate(`/eventos/${n.idRef}`);
+    }
+  }
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -61,7 +73,7 @@ export function NotificationBell() {
               notificacoes.slice(0, 20).map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => !n.lida && marcarLida.mutate(n.id)}
+                  onClick={() => handleClick(n)}
                   className={cn(
                     'flex w-full flex-col gap-0.5 border-b border-white/[0.04] px-4 py-3 text-left transition-colors hover:bg-white/[0.03]',
                     !n.lida && 'bg-brand-blue-soft/40',
@@ -69,6 +81,9 @@ export function NotificationBell() {
                 >
                   <div className="flex items-center gap-2">
                     {!n.lida && <span className="h-1.5 w-1.5 rounded-full bg-brand-light" />}
+                    {n.tipo === 'ALERTA' && (
+                      <Siren size={11} className="text-severity-critica" />
+                    )}
                     <span className="text-[12px] font-semibold text-ink-primary">{n.titulo}</span>
                   </div>
                   <span className="text-[11px] text-ink-secondary">{n.mensagem}</span>
