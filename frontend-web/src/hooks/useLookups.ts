@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { AlertaDTO, LookupItem, ZonaRiscoDTO } from '@/types/api';
+import type { LookupItem, ZonaRiscoDTO } from '@/types/api';
 
 const FIVE_MIN = 5 * 60_000;
 
@@ -21,13 +21,6 @@ export function useDemandaTipos() {
 }
 
 // ── Camadas do mapa ───────────────────────────────────────
-export function useAlertas() {
-  return useQuery({
-    queryKey: ['alertas'],
-    queryFn: () => api.get<AlertaDTO[]>('/alertas').then((r) => r.data),
-  });
-}
-
 export function useZonasRisco() {
   return useQuery({
     queryKey: ['zonas-risco'],

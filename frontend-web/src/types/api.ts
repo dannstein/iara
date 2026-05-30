@@ -238,15 +238,290 @@ export interface OcupanteDTO {
   dataSaida: string | null;
 }
 
+// ============================================================================
+// Alertas (Fase 1)
+// ============================================================================
+
+export type AlertaSeveridade =
+  | 'INFO'
+  | 'WARNING'
+  | 'DANGER'
+  | 'CRITICAL'
+  | 'EMERGENCY'
+  | 'SOLICITATION'
+  | 'OPERATIONAL';
+
+export type AlertaStatus = 'ACTIVE' | 'EXPIRED' | 'RESOLVED' | 'CANCELLED' | 'SUPERSEDED';
+
+export type AlertaCategoria =
+  | 'DANGER_ZONE'
+  | 'EVENT_ZONE'
+  | 'TENANT_BROADCAST'
+  | 'TECHNICAL_REQUEST'
+  | 'SUPPORT_POINTS'
+  | 'COLLECTION_POINTS'
+  | 'MONITORS'
+  | 'PERSONALIZED'
+  | 'ESCALATION';
+
+export type DeliveryStatus =
+  | 'SENT'
+  | 'DELIVERED'
+  | 'VISUALIZED'
+  | 'ACKNOWLEDGED'
+  | 'RESPONDED'
+  | 'FAILED';
+
+export type AckResponse = 'ACCEPT' | 'REFUSE' | 'UNAVAILABLE';
+
+export type GeofenceMode = 'INSIDE' | 'NEAR' | 'HOME' | 'WORK';
+
+export interface AckSummaryDTO {
+  sent: number;
+  delivered: number;
+  visualized: number;
+  acknowledged: number;
+  accepted: number;
+  refused: number;
+  unavailable: number;
+  failed: number;
+}
+
 export interface AlertaDTO {
   id: string;
+  tenantId: string;
+  emissorId: string;
   idEvento: string | null;
+  idZonaRisco: string | null;
   idTipo: string;
   tipoNome: string;
+  titulo: string | null;
   mensagem: string;
+  severidade: AlertaSeveridade;
+  status: AlertaStatus;
+  categoria: AlertaCategoria;
+  targetRole: string | null;
+  coordenadas: Coordenadas | null;
+  raioMetros: number | null;
   areaAlerta: GeoJsonGeometry | null;
-  emissorId: string;
+  geofenceModes: GeofenceMode[];
+  dataExpiracao: string | null;
+  autoExpireMinutes: number | null;
+  dataResolvido: string | null;
+  resolvedoPor: string | null;
+  requerAck: boolean;
+  ackMinimo: number | null;
+  isEscalation: boolean;
+  escalationMotivo: string | null;
+  escalationFromTenant: string | null;
+  totalDestinatarios: number;
+  ackSummary: AckSummaryDTO | null;
+  mergedCount: number;
+  merged: boolean;
   createdAt: string;
+}
+
+export interface AlertaDestinatarioDTO {
+  id: string;
+  alertaId: string;
+  usuarioId: string;
+  usuarioNome: string;
+  usuarioRole: Role;
+  deliveryStatus: DeliveryStatus;
+  response: AckResponse | null;
+  sentAt: string;
+  deliveredAt: string | null;
+  visualizedAt: string | null;
+  acknowledgedAt: string | null;
+  respondedAt: string | null;
+  failureReason: string | null;
+}
+
+export interface AlertaDashboardDTO {
+  ativos: number;
+  criticosAtivos: number;
+  acksPendentes: number;
+  resolvidosHoje: number;
+  porSeveridade: Record<string, number>;
+  porCategoria: Record<string, number>;
+}
+
+export interface AlertaPreviewDTO {
+  totalDestinatarios: number;
+  porRole: Record<string, number>;
+  porTenant: Record<string, number>;
+  cooldownAtivo: boolean;
+  existingAlertaId: string | null;
+}
+
+export interface AlertaTemplateDTO {
+  categoria: AlertaCategoria;
+  titulo: string;
+  mensagem: string;
+  placeholders: string[];
+}
+
+// --- Phase 2A: Scheduled Alerts ---
+
+export type RecurrenceType = 'ONE_TIME' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export interface AlertaAgendadoDTO {
+  id: string;
+  tenantId: string;
+  criadorId: string;
+  nome: string;
+  categoria: AlertaCategoria;
+  payload: Record<string, unknown>;
+  tipoRecorrencia: RecurrenceType;
+  inicio: string;
+  fim: string | null;
+  horario: string | null;
+  diaSemana: number | null;
+  diaMes: number | null;
+  intervaloHoras: number | null;
+  isAtivo: boolean;
+  ultimaExecucao: string | null;
+  proximaExecucao: string;
+  totalDisparos: number;
+  ultimoErro: string | null;
+  createdAt: string;
+}
+
+export interface CreateAlertaAgendadoInput {
+  nome: string;
+  categoria: AlertaCategoria;
+  payload: Record<string, unknown>;
+  tipoRecorrencia: RecurrenceType;
+  inicio: string;
+  fim?: string;
+  horario?: string;
+  diaSemana?: number;
+  diaMes?: number;
+  intervaloHoras?: number;
+}
+
+// --- Create requests (one per category) ---
+
+export interface CreateDangerZoneAlertInput {
+  idZonaRisco?: string;
+  todasZonas?: boolean;
+  severidade: AlertaSeveridade;
+  titulo?: string;
+  mensagem?: string;
+  geofenceModes: GeofenceMode[];
+  raioMetros?: number;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+  requerAck?: boolean;
+}
+
+export interface CreateEventZoneAlertInput {
+  idEvento?: string;
+  todosEventos?: boolean;
+  severidade: AlertaSeveridade;
+  titulo?: string;
+  mensagem?: string;
+  geofenceModes: GeofenceMode[];
+  raioMetros?: number;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+  requerAck?: boolean;
+}
+
+export interface CreateTenantBroadcastInput {
+  idTenantAlvo: string;
+  targetRole?: string;
+  severidade: AlertaSeveridade;
+  titulo?: string;
+  mensagem: string;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+}
+
+export interface CreateTechnicalRequestInput {
+  idEvento: string;
+  especialidadeId?: string;
+  raioMetros?: number;
+  tenantWide?: boolean;
+  titulo?: string;
+  mensagem?: string;
+  ackMinimo?: number;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+}
+
+export interface CreateSupportPointsInput {
+  idZonaRisco: string;
+  escopoTipo?: 'ZONA' | 'RAIO' | 'TENANT';
+  raioMetros?: number;
+  severidade: AlertaSeveridade;
+  titulo?: string;
+  mensagem?: string;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+}
+
+export interface CreateCollectionPointsInput {
+  idEvento: string;
+  escopoTipo?: 'EVENTO' | 'RAIO' | 'TENANT';
+  raioMetros?: number;
+  severidade: AlertaSeveridade;
+  titulo?: string;
+  mensagem?: string;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+}
+
+export interface CreateMonitorsInput {
+  idEvento?: string;
+  idZonaRisco?: string;
+  escopoTipo?: 'RAIO' | 'TENANT';
+  raioMetros?: number;
+  severidade: AlertaSeveridade;
+  titulo?: string;
+  mensagem?: string;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+}
+
+export interface CreatePersonalizedInput {
+  severidade: AlertaSeveridade;
+  targetRole?: string;
+  coordenadas?: Coordenadas;
+  raioMetros?: number;
+  geofenceModes?: GeofenceMode[];
+  idEvento?: string;
+  idZonaRisco?: string;
+  idTenantAlvo?: string;
+  titulo: string;
+  mensagem: string;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+  requerAck?: boolean;
+}
+
+export interface EscalateAlertInput {
+  idTenantAlvo: string;
+  severidade: 'DANGER' | 'CRITICAL' | 'EMERGENCY';
+  motivo: string;
+  titulo: string;
+  mensagem: string;
+  idEvento?: string;
+  idZonaRisco?: string;
+  dataExpiracao?: string;
+  autoExpireMinutes?: number;
+}
+
+export interface AckInput {
+  acao: 'ACKNOWLEDGE' | 'ACCEPT' | 'REFUSE' | 'UNAVAILABLE';
+}
+
+export interface AlertasFilter {
+  status?: AlertaStatus;
+  severidade?: AlertaSeveridade;
+  categoria?: AlertaCategoria;
+  id_evento?: string;
+  id_zona_risco?: string;
 }
 
 export type HospitalTipo = 'PUBLICO' | 'PRIVADO' | 'MISTO' | 'CAMPANHA';

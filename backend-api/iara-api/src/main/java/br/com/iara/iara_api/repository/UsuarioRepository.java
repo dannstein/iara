@@ -56,6 +56,72 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
                                          @Param("raioMetros") int raioMetros,
                                          @Param("tenantId") UUID tenantId);
 
+    /** Usuários com endereço residencial dentro da geometria de uma zona de risco. */
+    @Query(value = """
+            select u.* from iara_usuario u
+            join iara_endereco e on e.id = u.id_endereco
+            where e.coordenadas is not null
+              and u.id_tenant = :tenantId
+              and ST_Within(e.coordenadas,
+                    (select z.geometria from iara_zona_risco z where z.id = :zonaId))
+            """, nativeQuery = true)
+    List<Usuario> usuariosComEnderecoEmZonaRisco(@Param("zonaId") UUID zonaId,
+                                                  @Param("tenantId") UUID tenantId);
+
+    /** Usuários com endereço residencial dentro do raio (metros) de um evento. */
+    @Query(value = """
+            select u.* from iara_usuario u
+            join iara_endereco e on e.id = u.id_endereco
+            where e.coordenadas is not null
+              and u.id_tenant = :tenantId
+              and ST_DWithin(
+                    e.coordenadas::geography,
+                    (select ev.coordenadas::geography from iara_evento ev where ev.id = :eventoId),
+                    :raioMetros)
+            """, nativeQuery = true)
+    List<Usuario> usuariosComEnderecoNoRaioDoEvento(@Param("eventoId") UUID eventoId,
+                                                     @Param("raioMetros") int raioMetros,
+                                                     @Param("tenantId") UUID tenantId);
+
+    /** Usuários no raio de uma coordenada (geofencing personalizado, qualquer role). */
+    @Query(value = """
+            select u.* from iara_usuario u
+            where u.localizacao is not null
+              and u.id_tenant in (:tenantIds)
+              and ST_DWithin(
+                    u.localizacao::geography,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                    :raioMetros)
+            """, nativeQuery = true)
+    List<Usuario> usuariosNoRaio(@Param("lat") double lat, @Param("lng") double lng,
+                                  @Param("raioMetros") int raioMetros,
+                                  @Param("tenantIds") List<UUID> tenantIds);
+
+    /** Usuários com endereço residencial no raio de uma coordenada. */
+    @Query(value = """
+            select u.* from iara_usuario u
+            join iara_endereco e on e.id = u.id_endereco
+            where e.coordenadas is not null
+              and u.id_tenant in (:tenantIds)
+              and ST_DWithin(
+                    e.coordenadas::geography,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                    :raioMetros)
+            """, nativeQuery = true)
+    List<Usuario> usuariosComEnderecoNoRaio(@Param("lat") double lat, @Param("lng") double lng,
+                                             @Param("raioMetros") int raioMetros,
+                                             @Param("tenantIds") List<UUID> tenantIds);
+
+    /** Todos os usuários aprovados de um conjunto de tenants, opcionalmente filtrados por role. */
+    @Query("""
+            select u from Usuario u
+            where u.tenant.id in :tenantIds
+              and u.cadastroSts = 'APROVADO'
+              and (:role is null or u.role.roleNome = :role)
+            """)
+    List<Usuario> aprovadosPorTenantsERole(@Param("tenantIds") List<UUID> tenantIds,
+                                            @Param("role") String role);
+
     /**
      * Técnicos aprovados e disponíveis dentro do raio (em metros) de uma coordenada (query 2 do DDL).
      * Ordenados por distância ascendente. especId opcional (String para permitir cast/NULL no native).

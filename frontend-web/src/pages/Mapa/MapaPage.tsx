@@ -16,7 +16,8 @@ import { SeverityBadge, StatusBadge, Button } from '@/components/ui';
 import { useEventos } from '@/hooks/useEventos';
 import { usePontosColeta } from '@/hooks/usePontosColeta';
 import { useAbrigos } from '@/hooks/useAbrigos';
-import { useAlertas, useZonasRisco } from '@/hooks/useLookups';
+import { useAlertasMapLayer } from '@/hooks/useAlertas';
+import { useZonasRisco } from '@/hooks/useLookups';
 import { severidadeConfig, formatRelative } from '@/lib/utils';
 import type { EventoDTO } from '@/types/api';
 
@@ -74,7 +75,7 @@ export function MapaPage() {
   const pcs = usePontosColeta({ is_active: true });
   const abrigos = useAbrigos({ is_active: true });
   const zonas = useZonasRisco();
-  const alertas = useAlertas();
+  const alertas = useAlertasMapLayer();
 
   // Eventos "ativos" para o mapa: tudo que não está encerrado/cancelado.
   const eventosVisiveis = useMemo(

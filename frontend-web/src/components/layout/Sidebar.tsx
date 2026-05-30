@@ -11,10 +11,13 @@ import {
   Users,
   LifeBuoy,
   ShieldCheck,
+  Siren,
+  Clock,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEventos } from '@/hooks/useEventos';
+import { useAlertasDashboard } from '@/hooks/useAlertas';
 
 interface NavEntry {
   href: string;
@@ -35,6 +38,13 @@ const groups: NavGroup[] = [
       { href: '/eventos', icon: AlertTriangle, label: 'Eventos' },
       { href: '/mapa', icon: Map, label: 'Mapa' },
       { href: '/prevencao', icon: ShieldCheck, label: 'Prevenção' },
+    ],
+  },
+  {
+    eyebrow: 'Comunicação',
+    items: [
+      { href: '/alertas', icon: Siren, label: 'Central de Alertas' },
+      { href: '/alertas/agendamentos', icon: Clock, label: 'Agendamentos' },
     ],
   },
   {
@@ -107,6 +117,16 @@ export function Sidebar() {
   const { data: pendentes } = useEventos({ status: 'SOLICITADO' });
   const pendentesCount = pendentes?.length ?? 0;
 
+  // contagem de alertas CRITICAL+EMERGENCY ativos (badge no item Central de Alertas)
+  const { data: alertDash } = useAlertasDashboard();
+  const criticosCount = alertDash?.criticosAtivos ?? 0;
+
+  function badgeFor(href: string): string | undefined {
+    if (href === '/eventos' && pendentesCount > 0) return String(pendentesCount);
+    if (href === '/alertas' && criticosCount > 0) return String(criticosCount);
+    return undefined;
+  }
+
   return (
     <aside className="fixed bottom-0 left-0 top-14 z-40 flex w-60 flex-col border-r border-white/5 bg-gradient-to-b from-bg-primary to-bg-app transition-all duration-200">
       <div className="flex-1 overflow-y-auto pb-2">
@@ -119,11 +139,7 @@ export function Sidebar() {
               <NavItem
                 key={item.href}
                 {...item}
-                badge={
-                  item.href === '/eventos' && pendentesCount > 0
-                    ? String(pendentesCount)
-                    : undefined
-                }
+                badge={badgeFor(item.href)}
                 badgeVariant="critica"
               />
             ))}

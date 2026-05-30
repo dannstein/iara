@@ -73,6 +73,24 @@ public class TenantScope {
         return baseVisibleTenantIds(usuario).contains(tenantId);
     }
 
+    /**
+     * Verifica se {@code candidateAncestorTenantId} é ancestral próprio do tenant atual do usuário.
+     * Usado para validar escalonamento de alertas (apenas para cima na hierarquia).
+     */
+    public boolean isAncestor(Usuario usuario, UUID candidateAncestorTenantId) {
+        if (candidateAncestorTenantId == null) return false;
+        Tenant cur = usuario.getTenant();
+        if (cur == null || candidateAncestorTenantId.equals(cur.getId())) return false;
+        // Sobe na cadeia paterna até encontrar o candidato ou o topo
+        while (cur != null) {
+            UUID parentId = cur.getPai() != null ? cur.getPai().getId() : null;
+            if (parentId == null) return false;
+            if (parentId.equals(candidateAncestorTenantId)) return true;
+            cur = tenantRepository.findById(parentId).orElse(null);
+        }
+        return false;
+    }
+
     /** IDs do tenant informado e de todos os seus descendentes. */
     private List<UUID> subtreeIds(UUID rootId) {
         List<UUID> ids = new ArrayList<>();

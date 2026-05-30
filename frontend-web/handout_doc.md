@@ -295,17 +295,284 @@ Cadastro 🔓 (público). Os de aprovação automática (doador/simples/coordena
 
 ---
 
-## 7. Alertas
+## 7. Alertas (Fase 1)
+
+Sistema de alertas operacional para a Defesa Civil. Cada categoria tem endpoint dedicado, com regras próprias de targeting (geofencing), cooldown e severidade. Toda criação enfileira fan-out assíncrono via RabbitMQ (`iara.alerts` + DLQ `iara.alerts.dlq`); destinatários individuais são persistidos em `iara_alerta_destinatario` com rastreamento de entrega/ack.
+
+### 7.1 Enums
+
+- **AlertaSeveridade:** `INFO | WARNING | DANGER | CRITICAL | EMERGENCY | SOLICITATION | OPERATIONAL` (define cor, ícone, cooldown, prioridade de entrega)
+- **AlertaStatus:** `ACTIVE | EXPIRED | RESOLVED | CANCELLED | SUPERSEDED`
+- **AlertaCategoria:** `DANGER_ZONE | EVENT_ZONE | TENANT_BROADCAST | TECHNICAL_REQUEST | SUPPORT_POINTS | COLLECTION_POINTS | MONITORS | PERSONALIZED | ESCALATION`
+- **DeliveryStatus:** `SENT | DELIVERED | VISUALIZED | ACKNOWLEDGED | RESPONDED | FAILED`
+- **AckResponse:** `ACCEPT | REFUSE | UNAVAILABLE`
+- **GeofenceMode (Fase 1):** `INSIDE | NEAR | HOME` (`WORK`, `PASSED_THROUGH`, `FREQUENT` adiados para Fase 2)
+
+### 7.2 Cooldown (Redis)
+
+Janela por severidade — bloqueia (HTTP 409) repetições próximas com a mesma "dedup key" (combinação de zona/evento/tenant/severidade/role).
+
+| Severidade | Cooldown |
+|------------|----------|
+| INFO | 10 min |
+| WARNING, SOLICITATION, OPERATIONAL | 5 min |
+| DANGER | 2 min |
+| CRITICAL, EMERGENCY | 30 s |
+
+### 7.3 Endpoints de criação (GESTOR) — todas retornam AlertaDTO 201
+
+| Método | Caminho | Body |
+|--------|---------|------|
+| POST | `/alertas/danger-zone` | CreateDangerZoneAlertRequest |
+| POST | `/alertas/event-zone` | CreateEventZoneAlertRequest |
+| POST | `/alertas/tenant-broadcast` | CreateTenantBroadcastRequest |
+| POST | `/alertas/technical-request` | CreateTechnicalRequestAlertRequest |
+| POST | `/alertas/support-points` | CreateSupportPointsAlertRequest |
+| POST | `/alertas/collection-points` | CreateCollectionPointsAlertRequest |
+| POST | `/alertas/monitors` | CreateMonitorsAlertRequest |
+| POST | `/alertas/personalized` | CreatePersonalizedAlertRequest |
+| POST | `/alertas/escalonar` | EscalateAlertRequest |
+
+**Escalonamento:** `tenantAlvo` DEVE ser **ancestral** do tenant do solicitante (validado via `TenantScope.isAncestor`). Severidade limitada a `DANGER`, `CRITICAL`, `EMERGENCY`. Motivo obrigatório com mínimo 20 caracteres. Cria registro permanente em `iara_alerta_escalation_log` (LGPD). Alvos: todos os GESTORes do tenant ancestral.
+
+### 7.4 Endpoints de consulta e gestão
 
 | Método | Caminho | Acesso | Body | Resposta |
 |--------|---------|--------|------|----------|
-| POST | `/alertas` | GESTOR | `{ "idEvento?","idTipo","mensagem","areaAlerta?":GeoJSON }` | AlertaDTO 201 |
-| GET | `/alertas` | 👤 | — | AlertaDTO[] |
-| GET | `/alertas/geofencing?lat=&lng=` | 👤 | — | AlertaDTO[] (alertas cuja área contém o ponto) |
-| GET | `/alertas/{id}` | 👤 | — | AlertaDTO |
-| DELETE | `/alertas/{id}` | GESTOR | — | 204 |
+| GET | `/alertas?status=&severidade=&categoria=&id_evento=&id_zona_risco=` | 👤 | filtros opcionais | AlertaDTO[] |
+| GET | `/alertas/geofencing?lat=&lng=` | 👤 | — | AlertaDTO[] (apenas ACTIVE cuja `areaAlerta` contém o ponto) |
+| GET | `/alertas/dashboard` | MONITOR | — | AlertaDashboardDTO |
+| GET | `/alertas/{id}` | 👤 | — | AlertaDTO (com `ackSummary` agregado) |
+| GET | `/alertas/{id}/destinatarios?status=` | GESTOR | filtro opcional por DeliveryStatus | AlertaDestinatarioDTO[] |
+| PATCH | `/alertas/{id}/resolver` | GESTOR | — | AlertaDTO (status → RESOLVED) |
+| PATCH | `/alertas/{id}/cancelar` | GESTOR | — | AlertaDTO (status → CANCELLED) |
+| PATCH | `/alertas/{id}/ack` | 👤 (destinatário) | `{ "acao": "ACKNOWLEDGE" \| "ACCEPT" \| "REFUSE" \| "UNAVAILABLE" }` | AlertaDestinatarioDTO |
+| DELETE | `/alertas/{id}` | ADMIN | — | 204 (hard delete; cascata em destinatários e log de escalonamento) |
 
-**AlertaDTO:** `{ id, idEvento, idTipo, tipoNome, mensagem, areaAlerta:GeoJSON|null, emissorId, createdAt }`
+### 7.5 Expiração automática
+
+Job `AlertaExpirationJob` roda a cada 1 min: alertas ACTIVE com `dataExpiracao < now()` OU `created_at + autoExpireMinutes < now()` ficam `EXPIRED`.
+
+### 7.6 Resolução automática
+
+Quando um Evento muda para `ENCERRADO` ou `CANCELADO`, o listener `AlertaResolveOnEventoCloseListener` (Spring `@EventListener`) marca todos os alertas ACTIVE com `id_evento = <esse evento>` como `RESOLVED`.
+
+### 7.7 DTOs
+
+**AlertaDTO**
+```
+{
+  id, tenantId, emissorId, idEvento, idZonaRisco, idTipo, tipoNome,
+  titulo, mensagem,
+  severidade: AlertaSeveridade, status: AlertaStatus, categoria: AlertaCategoria,
+  targetRole, coordenadas:{lat,lng}|null, raioMetros, areaAlerta:GeoJSON|null,
+  geofenceModes:[GeofenceMode],
+  dataExpiracao, autoExpireMinutes, dataResolvido, resolvedoPor,
+  requerAck, ackMinimo,
+  isEscalation, escalationMotivo, escalationFromTenant,
+  totalDestinatarios, ackSummary:AckSummaryDTO|null, createdAt
+}
+```
+
+**AckSummaryDTO** — contagens por status: `{ sent, delivered, visualized, acknowledged, accepted, refused, unavailable, failed }`
+
+**AlertaDestinatarioDTO**
+```
+{
+  id, alertaId, usuarioId, usuarioNome, usuarioRole,
+  deliveryStatus: DeliveryStatus, response: AckResponse|null,
+  sentAt, deliveredAt, visualizedAt, acknowledgedAt, respondedAt, failureReason
+}
+```
+
+**AlertaDashboardDTO**
+```
+{
+  ativos, criticosAtivos, acksPendentes, resolvidosHoje,
+  porSeveridade: { <severidade>: n },
+  porCategoria: { <categoria>: n }
+}
+```
+
+### 7.8 Requests
+
+```jsonc
+// CreateDangerZoneAlertRequest
+{
+  "idZonaRisco": "uuid|null",          // ou null + todasZonas=true
+  "todasZonas": false,
+  "severidade": "DANGER",
+  "titulo": "...", "mensagem": "...",  // opcionais — usa defaults da categoria
+  "geofenceModes": ["INSIDE","NEAR","HOME"],
+  "raioMetros": 5000,                  // opcional, sobrescreve raio da zona
+  "dataExpiracao": "ISO|null",
+  "autoExpireMinutes": 60,
+  "requerAck": false
+}
+
+// CreateEventZoneAlertRequest — mesma estrutura, idEvento + todosEventos
+// CreateTenantBroadcastRequest
+{
+  "idTenantAlvo": "uuid",              // deve estar no escopo do criador
+  "targetRole": "TECNICO|null",        // null = todos os usuários do tenant
+  "severidade": "INFO", "titulo": "...", "mensagem": "...",
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60
+}
+
+// CreateTechnicalRequestAlertRequest
+{
+  "idEvento": "uuid",                  // obrigatório
+  "especialidadeId": "uuid|null",
+  "raioMetros": 10000,                 // opcional, sobrescreve raio do evento
+  "tenantWide": false,                 // true → todos os técnicos do tenant
+  "titulo": "...", "mensagem": "...",
+  "ackMinimo": 5,                      // meta de aceites; barra de progresso na UI
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60
+}
+
+// CreateSupportPointsAlertRequest
+{
+  "idZonaRisco": "uuid",
+  "escopoTipo": "ZONA|RAIO|TENANT",
+  "raioMetros": 5000,                  // só se escopoTipo=RAIO
+  "severidade": "WARNING", "titulo": "...", "mensagem": "...",
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60
+}
+
+// CreateCollectionPointsAlertRequest
+{
+  "idEvento": "uuid",
+  "escopoTipo": "EVENTO|RAIO|TENANT",
+  "raioMetros": 5000,
+  "severidade": "INFO", "titulo": "...", "mensagem": "...",
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60
+}
+
+// CreateMonitorsAlertRequest
+{
+  "idEvento": "uuid|null",
+  "idZonaRisco": "uuid|null",
+  "escopoTipo": "RAIO|TENANT",
+  "raioMetros": 5000,
+  "severidade": "OPERATIONAL", "titulo": "...", "mensagem": "...",
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60
+}
+
+// CreatePersonalizedAlertRequest
+{
+  "severidade": "INFO",
+  "targetRole": "DOADOR|null",
+  "coordenadas": {"lat": -23.5, "lng": -46.6} | null,
+  "raioMetros": 5000,
+  "geofenceModes": ["INSIDE","NEAR","HOME"],
+  "idEvento": "uuid|null", "idZonaRisco": "uuid|null",
+  "idTenantAlvo": "uuid|null",         // null = tenant do criador
+  "titulo": "...", "mensagem": "...",  // ambos obrigatórios
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60,
+  "requerAck": false
+}
+
+// EscalateAlertRequest
+{
+  "idTenantAlvo": "uuid",              // DEVE ser ancestral (senão 403)
+  "severidade": "DANGER|CRITICAL|EMERGENCY",  // só estas 3 (senão 422)
+  "motivo": "≥20 caracteres",          // auditado em iara_alerta_escalation_log
+  "titulo": "...", "mensagem": "...",
+  "idEvento": "uuid|null", "idZonaRisco": "uuid|null",
+  "dataExpiracao": "ISO|null", "autoExpireMinutes": 60
+}
+
+// AckRequest (PATCH /alertas/{id}/ack pelo destinatário)
+{ "acao": "ACKNOWLEDGE | ACCEPT | REFUSE | UNAVAILABLE" }
+```
+
+### 7.9 Erros típicos da Fase 1
+
+| Código | Cenário |
+|--------|---------|
+| 403 | Tenant alvo fora do escopo; ou escalonamento para tenant não-ancestral |
+| 422 | Geofencing modes vazio; mensagem ausente em broadcast; severidade fora de `DANGER+` em escalonamento; motivo de escalonamento <20 chars |
+| 404 | Zona/Evento/Tenant referenciado não existe; usuário não é destinatário em `/visualizar` ou `/ack` |
+
+> **Nota:** A partir do MERGE de cooldown (1F.3), criar um alerta idêntico durante a janela de cooldown NÃO retorna mais 409 — ao invés disso, retorna 201 com o alerta existente (mesmo id), `merged: true` e `mergedCount` incrementado.
+
+---
+
+### 7.10 Polish da Fase 1 (Finalização)
+
+Quatro adições que completam a Fase 1, sem schema breaking changes além da migration V7 que adiciona `merged_count` à `iara_alerta`.
+
+#### 7.10.1 VISUALIZED tracking
+
+| Método | Caminho | Acesso | Resposta |
+|--------|---------|--------|----------|
+| PATCH | `/alertas/{id}/visualizar` | 👤 (destinatário) | AlertaDestinatarioDTO |
+
+- Idempotente. Se status ∈ {SENT, DELIVERED} → vira VISUALIZED + `visualized_at = now()`. Se já está em ACK/RESPONDED, não regride. 404 se o usuário atual não é destinatário.
+- Frontend dispara automaticamente ao abrir o detalhe do alerta enquanto o usuário-logado é destinatário.
+
+#### 7.10.2 Preview de destinatários
+
+| Método | Caminho | Acesso | Body | Resposta |
+|--------|---------|--------|------|----------|
+| POST | `/alertas/preview/{categoria}` | GESTOR | Mesmo request da criação | AlertaPreviewDTO |
+
+`{categoria}` ∈ `danger-zone | event-zone | tenant-broadcast | technical-request | support-points | collection-points | monitors | personalized | escalonar`.
+
+**AlertaPreviewDTO**
+```
+{
+  totalDestinatarios: int,
+  porRole: { "GESTOR": 1, "DOADOR": 2, ... },
+  porTenant: { "<uuid>": n },
+  cooldownAtivo: bool,
+  existingAlertaId: UUID | null   // alerta que seria mesclado, se cooldownAtivo
+}
+```
+
+- Executa o mesmo targeting do create, mas **NÃO** persiste e **NÃO** dispara em RabbitMQ.
+- Cooldown check em modo "peek" (não consome a janela).
+- Frontend usa para mostrar "X usuários receberão este alerta" antes do botão "Confirmar e enviar".
+
+#### 7.10.3 Cooldown MERGE mode
+
+Quando um alerta idêntico cai na janela de cooldown:
+
+- O alerta existente recebe `merged_count++` e `data_expiracao` estendido em +30 min.
+- O dispatch e o targeting **não rodam novamente** — o alerta original já alcançou seu público.
+- Resposta HTTP 201 (criado), com flag `merged: true` e `id` apontando para o alerta existente.
+
+Campos novos em **AlertaDTO**:
+```
+{
+  ...,
+  mergedCount: int,    // quantas vezes este alerta absorveu duplicatas
+  merged: boolean      // true se ESTA resposta foi resultado de merge
+}
+```
+
+Cache de cooldown ainda usa Redis: `alert:cooldown:<categoria>:<tenantId>:<dedupKey>`. Valor agora é o `alerta_id` (não mais "1"), permitindo a busca para merge.
+
+#### 7.10.4 Templates padrão por categoria
+
+| Método | Caminho | Acesso | Resposta |
+|--------|---------|--------|----------|
+| GET | `/alertas/templates/{categoria}` | GESTOR | AlertaTemplateDTO |
+
+`{categoria}` ∈ `DANGER_ZONE | EVENT_ZONE | TENANT_BROADCAST | TECHNICAL_REQUEST | SUPPORT_POINTS | COLLECTION_POINTS | MONITORS | PERSONALIZED | ESCALATION`.
+
+**AlertaTemplateDTO**
+```
+{
+  categoria: AlertaCategoria,
+  titulo: "Risco em {zonaNome}",
+  mensagem: "Risco identificado em {zonaNome} ({zonaTipo}, nível {nivelRisco})…",
+  placeholders: ["zonaNome", "zonaTipo", "nivelRisco"]
+}
+```
+
+- Placeholders são substituídos no frontend (servidor não conhece o contexto: zona, evento, tenant).
+- Frontend mostra botão "Aplicar template padrão" no Step 2 do wizard.
 
 ---
 

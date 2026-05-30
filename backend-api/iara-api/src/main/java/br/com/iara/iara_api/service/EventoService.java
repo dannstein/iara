@@ -10,8 +10,10 @@ import br.com.iara.iara_api.messaging.NotificationPublisher;
 import br.com.iara.iara_api.repository.*;
 import br.com.iara.iara_api.security.CurrentUser;
 import br.com.iara.iara_api.security.TenantScope;
+import br.com.iara.iara_api.service.alert.EventoEncerradoEvent;
 import br.com.iara.iara_api.util.geo.GeoUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,7 @@ public class EventoService {
     private final TenantScope tenantScope;
     private final NotificationPublisher notificationPublisher;
     private final PcNotificacaoService pcNotificacaoService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     // ----------------------------------------------------------- CRUD / ciclo
 
@@ -143,6 +146,7 @@ public class EventoService {
         e.setStatus(req.status());
         if ("ENCERRADO".equals(req.status())) {
             e.setDataEncerramento(java.time.OffsetDateTime.now());
+            applicationEventPublisher.publishEvent(new EventoEncerradoEvent(e.getId(), "ENCERRADO"));
         }
         registrarHistorico(e, de, req.status(), gestor, req.observacao());
         return EventoDTO.from(e, upvoteRepository.countByEventoId(e.getId()));
@@ -158,6 +162,7 @@ public class EventoService {
         String de = e.getStatus();
         e.setStatus("CANCELADO");
         registrarHistorico(e, de, "CANCELADO", gestor, observacao);
+        applicationEventPublisher.publishEvent(new EventoEncerradoEvent(e.getId(), "CANCELADO"));
         return EventoDTO.from(e, 0);
     }
 
