@@ -16,7 +16,7 @@ import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiCached, TTL } from '../lib/cache';
 import { api } from '../services/api';
-import { DonationPointCard, type DemandaChip } from '../components/DonationPointCard';
+import { LocalCard, type InventarioItem } from '../components/LocalCard';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -33,7 +33,6 @@ interface PcDTO {
 
 interface DemandaDTO {
   id: string;
-  idTipo: string;
   tipoNome: string;
   prioridade: 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAIXA' | 'SUPRIDA';
   qtdSolicitada: number;
@@ -42,15 +41,14 @@ interface DemandaDTO {
 }
 
 interface PcComDemandas extends PcDTO {
-  demandas: DemandaChip[];
+  demandas: InventarioItem[];
 }
 
 // ── Ordenação por confiança ───────────────────────────────────
-// Verificado + Fixo primeiro
 
 function pontuacao(pc: PcDTO): number {
   let s = 0;
-  if (pc.pcIsVerified)     s += 10;
+  if (pc.pcIsVerified)      s += 10;
   if (pc.pcTipo === 'FIXO') s += 5;
   return s;
 }
@@ -72,10 +70,8 @@ export default function PontosColetaScreen() {
         ? (await api.get<PcDTO[]>('/pontos-coleta?is_active=true', { headers })).data
         : await apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers, TTL.pontos);
 
-      // Ordena por confiança
       const ordenados = [...pcs].sort((a, b) => pontuacao(b) - pontuacao(a));
 
-      // Busca demandas de cada PC em paralelo (usa cache)
       const comDemandas = await Promise.all(
         ordenados.map(async (pc) => {
           try {
@@ -84,10 +80,10 @@ export default function PontosColetaScreen() {
               headers,
               TTL.pontos,
             );
-            const chips: DemandaChip[] = dems
+            const inventario: InventarioItem[] = dems
               .filter((d) => d.prioridade !== 'SUPRIDA')
               .map((d) => ({ tipoNome: d.tipoNome, prioridade: d.prioridade }));
-            return { ...pc, demandas: chips };
+            return { ...pc, demandas: inventario };
           } catch {
             return { ...pc, demandas: [] };
           }
@@ -147,15 +143,15 @@ export default function PontosColetaScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <DonationPointCard
-              title={item.pcNome}
-              type={item.pcTipo ? (item.pcTipo === 'FIXO' ? 'Fixo' : 'Temporário') : undefined}
+            <LocalCard
+              nome={item.pcNome}
+              tipo={item.pcTipo === 'FIXO' ? 'Fixo' : item.pcTipo === 'TEMPORARIO' ? 'Temporário' : undefined}
               isVerified={item.pcIsVerified}
+              endereco={item.pcDesc}
               contato={item.pcContato}
-              endereco={item.pcDesc ?? `${item.coordenadas.lat.toFixed(4)}, ${item.coordenadas.lng.toFixed(4)}`}
-              demandas={item.demandas}
+              coordenadas={item.coordenadas}
+              inventario={item.demandas}
               onPressDetails={() => router.push(`/ponto-coleta-detalhe?id=${item.id}` as never)}
-              onPressNavigate={() => {/* GPS — implementar com expo-location */}}
             />
           )}
         />
@@ -167,14 +163,14 @@ export default function PontosColetaScreen() {
 // ── Estilos ──────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea:    { flex: 1, backgroundColor: Colors.neutral.gray },
-  topBar:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
-  backBtn:     { padding: 4 },
-  title:       { fontSize: 18, fontWeight: '800', color: Colors.blue.dark },
-  subtitle:    { fontSize: 11, color: '#94A3B8', marginTop: 1 },
-  countBadge:  { marginLeft: 'auto', backgroundColor: Colors.blue.dark, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
-  countText:   { color: '#fff', fontSize: 12, fontWeight: '700' },
-  list:        { paddingHorizontal: 16, paddingBottom: 100 },
-  center:      { paddingTop: 60, alignItems: 'center', gap: 12 },
-  emptyText:   { color: '#94A3B8', fontSize: 14, textAlign: 'center' },
+  safeArea:   { flex: 1, backgroundColor: Colors.neutral.gray },
+  topBar:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
+  backBtn:    { padding: 4 },
+  title:      { fontSize: 18, fontWeight: '800', color: Colors.blue.dark },
+  subtitle:   { fontSize: 11, color: '#94A3B8', marginTop: 1 },
+  countBadge: { marginLeft: 'auto', backgroundColor: Colors.blue.dark, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  countText:  { color: '#fff', fontSize: 12, fontWeight: '700' },
+  list:       { paddingHorizontal: 16, paddingBottom: 100 },
+  center:     { paddingTop: 60, alignItems: 'center', gap: 12 },
+  emptyText:  { color: '#94A3B8', fontSize: 14, textAlign: 'center' },
 });

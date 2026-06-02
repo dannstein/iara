@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Linking, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getPinned, togglePin } from '../lib/pinnedLocations';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,9 @@ interface HospitalDTO {
   isActive: boolean;
 }
 
+const openInMaps = (lat: number, lng: number) =>
+  Linking.openURL(`https://maps.google.com/?q=${lat},${lng}`);
+
 const TIPO_LABEL: Record<string, { label: string; color: string }> = {
   PUBLICO:   { label: 'Público',    color: '#3B82F6' },
   PRIVADO:   { label: 'Privado',    color: '#8B5CF6' },
@@ -32,11 +36,27 @@ const TIPO_LABEL: Record<string, { label: string; color: string }> = {
 
 export default function HospitaisScreen() {
   const { accessToken } = useAuth();
-  const [hospitais, setHospitais] = useState<HospitalDTO[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [hospitais, setHospitais]   = useState<HospitalDTO[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pinnedIds, setPinnedIds]   = useState<Set<string>>(new Set());
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${accessToken}` }), [accessToken]);
+
+  useEffect(() => {
+    getPinned().then((list) => {
+      setPinnedIds(new Set(list.filter((p) => p.tipo === 'hospital').map((p) => p.id)));
+    });
+  }, []);
+
+  async function handlePin(item: HospitalDTO) {
+    const nowPinned = await togglePin({ id: item.id, tipo: 'hospital', nome: item.nome });
+    setPinnedIds((prev) => {
+      const next = new Set(prev);
+      if (nowPinned) next.add(item.id); else next.delete(item.id);
+      return next;
+    });
+  }
 
   const fetch = useCallback(async (force = false) => {
     if (!accessToken) return;
@@ -77,6 +97,7 @@ export default function HospitaisScreen() {
             const tipoCfg = TIPO_LABEL[item.tipo] ?? { label: item.tipo, color: '#64748B' };
             return (
               <View style={styles.card}>
+                {/* Badges de tipo */}
                 <View style={styles.cardTop}>
                   <View style={[styles.tipoBadge, { backgroundColor: `${tipoCfg.color}18` }]}>
                     <Text style={[styles.tipoText, { color: tipoCfg.color }]}>{tipoCfg.label}</Text>
@@ -85,8 +106,28 @@ export default function HospitaisScreen() {
                     <View style={styles.campBadge}><Text style={styles.campText}>Aceita campanha</Text></View>
                   )}
                 </View>
-                <Text style={styles.cardTitle}>{item.nome}</Text>
 
+                {/* Nome + fixar */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.cardTitle, { flex: 1 }]}>{item.nome}</Text>
+                  <TouchableOpacity onPress={() => handlePin(item)} hitSlop={8} activeOpacity={0.7}>
+                    <Ionicons
+                      name={pinnedIds.has(item.id) ? 'bookmark' : 'bookmark-outline'}
+                      size={20}
+                      color={pinnedIds.has(item.id) ? Colors.brand.dark_orange : '#94A3B8'}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Localização */}
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={13} color="#6B7280" />
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    {item.coordenadas.lat.toFixed(5)}, {item.coordenadas.lng.toFixed(5)}
+                  </Text>
+                </View>
+
+                {/* Stats leitos */}
                 <View style={styles.statsRow}>
                   {item.leitosDisponiveis != null && (
                     <View style={styles.stat}>
@@ -102,16 +143,29 @@ export default function HospitaisScreen() {
                   )}
                 </View>
 
+                {/* Contato */}
                 {item.contato ? (
                   <View style={styles.stat}>
                     <Ionicons name="call-outline" size={13} color="#64748B" />
                     <Text style={styles.statText}>{item.contato}</Text>
                   </View>
                 ) : null}
-                <TouchableOpacity style={styles.detailsBtn} activeOpacity={0.8}>
-                  <Text style={styles.detailsBtnText}>Ver detalhes</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#fff" />
-                </TouchableOpacity>
+
+                {/* Botões */}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={styles.mapBtn}
+                    onPress={() => openInMaps(item.coordenadas.lat, item.coordenadas.lng)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="map-outline" size={14} color={Colors.blue.medium} />
+                    <Text style={styles.mapBtnText}>Ver no Mapa</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.detailsBtn} activeOpacity={0.8}>
+                    <Text style={styles.detailsBtnText}>Ver Detalhes</Text>
+                    <Ionicons name="chevron-forward" size={15} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </View>
             );
           }}
@@ -141,6 +195,11 @@ const styles = StyleSheet.create({
   statsRow:    { flexDirection: 'row', gap: 16, flexWrap: 'wrap' },
   stat:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statText:    { fontSize: 12, color: '#64748B' },
-  detailsBtn:  { backgroundColor: Colors.blue.dark, borderRadius: 12, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  detailsBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  locationText:{ flex: 1, fontSize: 12, color: '#6B7280' },
+  actionRow:   { flexDirection: 'row', gap: 8 },
+  mapBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 12, paddingVertical: 10, borderWidth: 1.5, borderColor: Colors.blue.medium },
+  mapBtnText:  { color: Colors.blue.medium, fontSize: 13, fontWeight: '700' },
+  detailsBtn:  { flex: 1, backgroundColor: Colors.blue.dark, borderRadius: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  detailsBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

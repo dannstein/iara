@@ -14,6 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiCached, TTL } from '../lib/cache';
+import { checkPinned, togglePin } from '../lib/pinnedLocations';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -36,13 +37,27 @@ export default function PontoApoioDetalhe() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { accessToken } = useAuth();
 
-  const [ponto, setPonto] = useState<PontoApoioDTO | null>(null);
+  const [ponto, setPonto]   = useState<PontoApoioDTO | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pinned, setPinned]   = useState(false);
 
   const headers = useMemo(
     () => ({ Authorization: `Bearer ${accessToken}` }),
     [accessToken],
   );
+
+  useEffect(() => {
+    if (id) checkPinned(id, 'ponto-apoio').then(setPinned);
+  }, [id]);
+
+  async function handlePin() {
+    if (!ponto) return;
+    const nowPinned = await togglePin({
+      id: id as string, tipo: 'ponto-apoio',
+      nome: ponto.nome, endereco: ponto.enderecoTxt,
+    });
+    setPinned(nowPinned);
+  }
 
   useEffect(() => {
     if (!accessToken || !id) return;
@@ -84,6 +99,13 @@ export default function PontoApoioDetalhe() {
           <Ionicons name="arrow-back" size={22} color={Colors.blue.dark} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle} numberOfLines={1}>{ponto.nome}</Text>
+        <TouchableOpacity onPress={handlePin} style={styles.backBtn} activeOpacity={0.7}>
+          <Ionicons
+            name={pinned ? 'bookmark' : 'bookmark-outline'}
+            size={22}
+            color={pinned ? Colors.brand.dark_orange : '#94A3B8'}
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>

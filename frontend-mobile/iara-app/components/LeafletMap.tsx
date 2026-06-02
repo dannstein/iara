@@ -138,6 +138,23 @@ const LEAFLET_HTML = `<!DOCTYPE html>
     });
     if (best && bestD < 100 && !best.isPopupOpen()) { best.openPopup(); }
   });
+
+  // Localização do usuário — ponto azul + centraliza se ainda sem marcadores
+  var userMarker = null;
+  window.setCenter = function(lat, lng) {
+    if (userMarker) userMarker.remove();
+    var icon = L.divIcon({
+      html: '<div style="width:14px;height:14px;border-radius:50%;background:#3B82F6;border:3px solid rgba(255,255,255,0.95);box-shadow:0 0 0 5px rgba(59,130,246,0.22);"></div>',
+      className: '',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7]
+    });
+    userMarker = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 }).addTo(map);
+    userMarker.bindTooltip('Você está aqui', { permanent: false, direction: 'top' });
+    if (markerLayer.getLayers().length === 0) {
+      map.setView([lat, lng], 13, { animate: true });
+    }
+  };
 </script>
 </body>
 </html>`;
@@ -149,6 +166,7 @@ export function LeafletMap({
   markers  = [],
   circles  = [],
   polygons = [],
+  center,
   onMarkerPress,
 }: LeafletMapProps) {
   const webViewRef   = useRef<WebView>(null);
@@ -185,6 +203,13 @@ export function LeafletMap({
     if (!ready) return;
     injectData(markers, circles, polygons);
   }, [ready, markers, circles, polygons, injectData]);
+
+  useEffect(() => {
+    if (!ready || !center) return;
+    webViewRef.current?.injectJavaScript(
+      `if(window.setCenter)window.setCenter(${center.lat},${center.lng});true;`
+    );
+  }, [ready, center]);
 
   return (
     <View style={[styles.container, style]}>

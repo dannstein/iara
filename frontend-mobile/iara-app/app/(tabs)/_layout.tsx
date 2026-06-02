@@ -3,23 +3,19 @@ import { withLayoutContext } from 'expo-router';
 import { CustomTabBar } from '../../components/CustomTabBar';
 import { useAuth, type UserRole } from '../../context/AuthContext';
 
-// ── Navegador swipeável ──────────────────────────────────────
-
 const { Navigator } = createMaterialTopTabNavigator();
 const SwipeableTabs = withLayoutContext(Navigator);
 
-// ── Abas visíveis por role ───────────────────────────────────
-
-const ALL_TABS = ['home', 'events', 'report', 'pontos', 'profile'] as const;
+const ALL_TABS = ['home', 'events', 'report', 'pontos', 'menu', 'profile'] as const;
 
 const TABS_BY_ROLE: Record<string, readonly string[]> = {
-  DOADOR:          ['home', 'events', 'pontos', 'profile'],
-  USUARIO_SIMPLES: ['home', 'events', 'pontos', 'profile'],
-  COORDENADOR:     ['home', 'events', 'pontos', 'profile'],
-  TECNICO:         ['home', 'events', 'report', 'pontos', 'profile'],
-  MONITOR:         ['home', 'events', 'report', 'pontos', 'profile'],
-  GESTOR:          ['home', 'events', 'report', 'pontos', 'profile'],
-  ADMIN:           ['home', 'events', 'report', 'pontos', 'profile'],
+  DOADOR:          ['home', 'events', 'pontos', 'menu'],
+  USUARIO_SIMPLES: ['home', 'events', 'pontos', 'menu'],
+  COORDENADOR:     ['home', 'events', 'report', 'pontos', 'menu'],
+  TECNICO:         ['home', 'events', 'report', 'pontos', 'menu'],
+  MONITOR:         ['home', 'events', 'report', 'pontos', 'menu'],
+  GESTOR:          ['home', 'events', 'report', 'pontos', 'menu'],
+  ADMIN:           ['home', 'events', 'report', 'pontos', 'menu'],
 };
 
 const TAB_TITLES: Record<string, string> = {
@@ -27,6 +23,7 @@ const TAB_TITLES: Record<string, string> = {
   events:  'Eventos',
   report:  'Reportar',
   pontos:  'Locais',
+  menu:    'Menu',
   profile: 'Perfil',
 };
 
@@ -35,10 +32,7 @@ function getVisibleTabs(role: UserRole): readonly string[] {
   return TABS_BY_ROLE[role] ?? [];
 }
 
-// ── Layout ───────────────────────────────────────────────────
-
 export default function TabLayout() {
-  // Auth já foi resolvido pelo AuthGate em app/_layout.tsx — sem isLoading aqui.
   const { role } = useAuth();
   const visibleTabs = getVisibleTabs(role);
 
