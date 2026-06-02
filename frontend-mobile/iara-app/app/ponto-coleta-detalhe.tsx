@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiCached, TTL } from '../lib/cache';
 import { api } from '../services/api';
 import { useAppModal } from '../components/AppModal';
+import { checkPinned, togglePin } from '../lib/pinnedLocations';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export default function PontoColetaDetalhe() {
   const [demandas, setDemandas] = useState<DemandaDTO[]>([]);
   const [estoque, setEstoque]   = useState<EstoqueDTO[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [pinned, setPinned] = useState(false);
 
   // Modal de doação
   const [modalVisible, setModalVisible] = useState(false);
@@ -81,6 +83,19 @@ export default function PontoColetaDetalhe() {
   const [enviando, setEnviando]     = useState(false);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${accessToken}` }), [accessToken]);
+
+  useEffect(() => {
+    if (id) checkPinned(id, 'ponto-coleta').then(setPinned);
+  }, [id]);
+
+  async function handlePin() {
+    if (!pc) return;
+    const nowPinned = await togglePin({
+      id: id as string, tipo: 'ponto-coleta',
+      nome: pc.pcNome, endereco: pc.pcDesc,
+    });
+    setPinned(nowPinned);
+  }
 
   useEffect(() => {
     if (!accessToken || !id) return;
@@ -164,6 +179,13 @@ export default function PontoColetaDetalhe() {
           <Ionicons name="arrow-back" size={22} color={Colors.blue.dark} />
         </TouchableOpacity>
         <Text style={styles.topBarTitle} numberOfLines={1}>{pc.pcNome}</Text>
+        <TouchableOpacity onPress={handlePin} style={styles.pinBtn} activeOpacity={0.7}>
+          <Ionicons
+            name={pinned ? 'bookmark' : 'bookmark-outline'}
+            size={22}
+            color={pinned ? Colors.brand.dark_orange : '#94A3B8'}
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -377,6 +399,7 @@ const styles = StyleSheet.create({
   safeArea:       { flex: 1, backgroundColor: Colors.neutral.gray },
   topBar:         { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
   backBtn:        { padding: 4 },
+  pinBtn:         { padding: 4 },
   topBarTitle:    { flex: 1, fontSize: 17, fontWeight: '800', color: Colors.blue.dark },
   scroll:         { paddingHorizontal: 16, paddingBottom: 100 },
   center:         { paddingTop: 60, alignItems: 'center' },

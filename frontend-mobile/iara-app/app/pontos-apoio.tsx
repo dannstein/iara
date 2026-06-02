@@ -8,7 +8,7 @@ import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiCached, TTL } from '../lib/cache';
 import { api } from '../services/api';
-import { DonationPointCard } from '../components/DonationPointCard';
+import { LocalCard } from '../components/LocalCard';
 
 interface PontoApoioDTO {
   id: string;
@@ -25,13 +25,13 @@ interface PontoApoioDTO {
 
 export default function PontosApoioScreen() {
   const { accessToken } = useAuth();
-  const [pontos, setPontos] = useState<PontoApoioDTO[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [pontos, setPontos]         = useState<PontoApoioDTO[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${accessToken}` }), [accessToken]);
 
-  const fetch = useCallback(async (force = false) => {
+  const fetchData = useCallback(async (force = false) => {
     if (!accessToken) return;
     try {
       const data = force
@@ -43,7 +43,7 @@ export default function PontosApoioScreen() {
     }
   }, [accessToken, headers]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -64,15 +64,25 @@ export default function PontosApoioScreen() {
           keyExtractor={(i) => i.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetch(true); }} colors={[Colors.blue.dark]} />}
-          ListEmptyComponent={<View style={styles.center}><Text style={styles.emptyText}>Nenhum ponto de apoio cadastrado.</Text></View>}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); fetchData(true); }}
+              colors={[Colors.blue.dark]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={styles.emptyText}>Nenhum ponto de apoio cadastrado.</Text>
+            </View>
+          }
           renderItem={({ item }) => (
-            <DonationPointCard
-              title={item.nome}
-              type={item.zonaRiscoNome ? `Zona: ${item.zonaRiscoNome}` : undefined}
-              contato={item.contato}
+            <LocalCard
+              nome={item.nome}
+              tipo={item.zonaRiscoNome ? `Zona: ${item.zonaRiscoNome}` : undefined}
               endereco={item.enderecoTxt}
-              demandas={[]}
+              contato={item.contato}
+              coordenadas={item.coordenadas}
               onPressDetails={() =>
                 router.push({ pathname: '/ponto-apoio-detalhe', params: { id: item.id } } as never)
               }
@@ -85,13 +95,13 @@ export default function PontosApoioScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea:    { flex: 1, backgroundColor: Colors.neutral.gray },
-  topBar:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
-  backBtn:     { padding: 4 },
-  title:       { fontSize: 18, fontWeight: '800', color: Colors.blue.dark, flex: 1 },
-  countBadge:  { backgroundColor: Colors.brand.orange, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
-  countText:   { color: '#fff', fontSize: 12, fontWeight: '700' },
-  list:        { paddingHorizontal: 16, paddingBottom: 100 },
-  center:      { paddingTop: 60, alignItems: 'center' },
-  emptyText:   { color: '#94A3B8', fontSize: 14 },
+  safeArea:   { flex: 1, backgroundColor: Colors.neutral.gray },
+  topBar:     { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
+  backBtn:    { padding: 4 },
+  title:      { fontSize: 18, fontWeight: '800', color: Colors.blue.dark, flex: 1 },
+  countBadge: { backgroundColor: Colors.brand.orange, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  countText:  { color: '#fff', fontSize: 12, fontWeight: '700' },
+  list:       { paddingHorizontal: 16, paddingBottom: 100 },
+  center:     { paddingTop: 60, alignItems: 'center' },
+  emptyText:  { color: '#94A3B8', fontSize: 14 },
 });

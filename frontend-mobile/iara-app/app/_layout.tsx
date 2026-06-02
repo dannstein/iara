@@ -51,6 +51,8 @@ export default function RootLayout() {
           <Stack.Screen name="mural-necessidades" />
           <Stack.Screen name="evento-detalhe" />
           <Stack.Screen name="historico-doacoes" />
+          <Stack.Screen name="solicitacoes" />
+          <Stack.Screen name="fixados" />
         </Stack>
       </AuthGate>
     </AuthProvider>
