@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/lib/api';
 import type { AlertaDTO, AlertaSeveridade, Coordenadas, CreatePersonalizedInput, GeofenceMode, Role } from '@/types/api';
 import { ExpirationFields, FormSection, MessageFields, SeverityField } from './common';
 import { PreviewPanel } from '../components/PreviewPanel';
+import { HistoricalGeofenceFields } from '../components/HistoricalGeofenceFields';
 
 const ROLES: { value: Role | ''; label: string }[] = [
   { value: '', label: 'Todos' },
@@ -41,6 +42,9 @@ export function PersonalizedForm({ onSuccess }: Props) {
   const [requerAck, setRequerAck] = useState(false);
   const [dataExpiracao, setDataExpiracao] = useState<string | undefined>();
   const [autoExpireMinutes, setAutoExpireMinutes] = useState<number | undefined>();
+  const [lastHours, setLastHours] = useState<number | undefined>();
+  const [frequentMinDays, setFrequentMinDays] = useState<number | undefined>();
+  const [frequentLastDays, setFrequentLastDays] = useState<number | undefined>();
 
   function toggleMode(m: GeofenceMode) {
     setModes((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
@@ -61,6 +65,9 @@ export function PersonalizedForm({ onSuccess }: Props) {
       requerAck,
       dataExpiracao: dataExpiracao ? new Date(dataExpiracao).toISOString() : undefined,
       autoExpireMinutes,
+      lastHours: coordenadas && modes.includes('PASSED_THROUGH') ? lastHours : undefined,
+      frequentMinDays: coordenadas && modes.includes('FREQUENT') ? frequentMinDays : undefined,
+      frequentLastDays: coordenadas && modes.includes('FREQUENT') ? frequentLastDays : undefined,
     };
   }
 
@@ -124,6 +131,16 @@ export function PersonalizedForm({ onSuccess }: Props) {
                 ))}
               </div>
             </FormField>
+            <HistoricalGeofenceFields
+              modes={modes}
+              toggleMode={toggleMode}
+              lastHours={lastHours}
+              setLastHours={setLastHours}
+              frequentMinDays={frequentMinDays}
+              setFrequentMinDays={setFrequentMinDays}
+              frequentLastDays={frequentLastDays}
+              setFrequentLastDays={setFrequentLastDays}
+            />
           </>
         )}
       </FormSection>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { LogOut, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
+import { LogOut, ChevronRight, Sun, Moon, Monitor, Bell } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useLogout } from '@/hooks/useAuth';
 import { initials } from '@/lib/utils';
@@ -97,6 +97,12 @@ function UserMenu() {
             <p className="truncate text-[13px] font-semibold text-ink-primary">{user?.email}</p>
             <p className="text-[11px] text-ink-muted">{user?.role}</p>
           </div>
+          <button
+            onClick={() => { setOpen(false); navigate('/perfil/notificacoes'); }}
+            className="flex w-full items-center gap-2 border-b border-white/5 px-4 py-3 text-left text-[13px] text-ink-secondary transition-colors hover:bg-white/[0.04] hover:text-ink-primary"
+          >
+            <Bell size={15} /> Preferências de notificação
+          </button>
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-2 px-4 py-3 text-left text-[13px] text-ink-secondary transition-colors hover:bg-white/[0.04] hover:text-ink-primary"

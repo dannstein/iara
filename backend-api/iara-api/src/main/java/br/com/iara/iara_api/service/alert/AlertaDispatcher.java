@@ -7,6 +7,7 @@ import br.com.iara.iara_api.messaging.NotificationPublisher;
 import br.com.iara.iara_api.repository.AlertaDestinatarioRepository;
 import br.com.iara.iara_api.repository.AlertaRepository;
 import br.com.iara.iara_api.repository.UsuarioRepository;
+import br.com.iara.iara_api.service.NotificacaoPrefService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,9 +32,17 @@ public class AlertaDispatcher {
     private final AlertaDestinatarioRepository destinatarioRepository;
     private final UsuarioRepository usuarioRepository;
     private final NotificationPublisher publisher;
+    private final NotificacaoPrefService notificacaoPrefService;
+    private final AlertaPushService pushService;
 
     @Transactional
     public int dispatch(Alerta alerta, Set<UUID> destinatarios) {
+        if (destinatarios.isEmpty()) {
+            alerta.setTotalDestinatarios(0);
+            return 0;
+        }
+        destinatarios = notificacaoPrefService.filtrarOptOuts(
+                destinatarios, alerta.getCategoria(), alerta.getSeveridade());
         if (destinatarios.isEmpty()) {
             alerta.setTotalDestinatarios(0);
             return 0;
@@ -66,10 +75,58 @@ public class AlertaDispatcher {
         final String severidade = alerta.getSeveridade();
         final List<UUID> finalIds = List.copyOf(validIds);
 
+        final Alerta finalAlerta = alerta;
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
+                    publisher.dispatchAlert(alertaId, titulo, mensagem, severidade, finalIds);
+                    pushService.pushNew(finalAlerta, finalIds);
+                }
+            });
+        } else {
+            publisher.dispatchAlert(alertaId, titulo, mensagem, severidade, finalIds);
+            pushService.pushNew(finalAlerta, finalIds);
+        }
+        return validIds.size();
+    }
+
+    /**
+     * Adiciona novos destinatários a um alerta existente (usado pela expansão de raio).
+     * Diferença de {@link #dispatch}: NÃO substitui totalDestinatarios — incrementa.
+     */
+    @Transactional
+    public int dispatchAdditional(Alerta alerta, Set<UUID> novosDestinatarios) {
+        if (novosDestinatarios.isEmpty()) return 0;
+        novosDestinatarios = notificacaoPrefService.filtrarOptOuts(
+                novosDestinatarios, alerta.getCategoria(), alerta.getSeveridade());
+        if (novosDestinatarios.isEmpty()) return 0;
+        OffsetDateTime now = OffsetDateTime.now();
+        List<AlertaDestinatario> rows = new ArrayList<>(novosDestinatarios.size());
+        List<UUID> validIds = new ArrayList<>(novosDestinatarios.size());
+
+        for (UUID userId : novosDestinatarios) {
+            Usuario u = usuarioRepository.findById(userId).orElse(null);
+            if (u == null) continue;
+            AlertaDestinatario d = new AlertaDestinatario();
+            d.setAlerta(alerta);
+            d.setUsuario(u);
+            d.setDeliveryStatus("SENT");
+            d.setSentAt(now);
+            rows.add(d);
+            validIds.add(userId);
+        }
+        destinatarioRepository.saveAll(rows);
+        alerta.setTotalDestinatarios(alerta.getTotalDestinatarios() + validIds.size());
+
+        final UUID alertaId = alerta.getId();
+        final String titulo = alerta.getTitulo() != null ? alerta.getTitulo() : alerta.getTipo().getTipoNome();
+        final String mensagem = alerta.getMensagem();
+        final String severidade = alerta.getSeveridade();
+        final List<UUID> finalIds = List.copyOf(validIds);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() {
                     publisher.dispatchAlert(alertaId, titulo, mensagem, severidade, finalIds);
                 }
             });

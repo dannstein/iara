@@ -69,4 +69,13 @@ public interface AlertaRepository extends JpaRepository<Alerta, UUID> {
     @Modifying
     @Query("update Alerta a set a.totalDestinatarios = :total where a.id = :id")
     int updateTotalDestinatarios(@Param("id") UUID id, @Param("total") int total);
+
+    /** Alertas ACTIVE com configuração de expansão de raio pendente (2B). */
+    @Query("""
+            select a from Alerta a
+            where a.status = 'ACTIVE'
+              and a.requerAck = true
+              and a.expansionRadiiMetros is not null
+            """)
+    List<Alerta> findExpansionCandidates();
 }

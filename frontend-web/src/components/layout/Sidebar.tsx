@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Siren,
   Clock,
+  Bot,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,7 @@ const groups: NavGroup[] = [
     items: [
       { href: '/alertas', icon: Siren, label: 'Central de Alertas' },
       { href: '/alertas/agendamentos', icon: Clock, label: 'Agendamentos' },
+      { href: '/alertas/automaticos', icon: Bot, label: 'Alertas Automáticos' },
     ],
   },
   {

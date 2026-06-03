@@ -10,7 +10,9 @@ import br.com.iara.iara_api.messaging.NotificationPublisher;
 import br.com.iara.iara_api.repository.*;
 import br.com.iara.iara_api.security.CurrentUser;
 import br.com.iara.iara_api.security.TenantScope;
+import br.com.iara.iara_api.service.alert.EventoAprovadoEvent;
 import br.com.iara.iara_api.service.alert.EventoEncerradoEvent;
+import br.com.iara.iara_api.service.alert.EventoStatusChangedEvent;
 import br.com.iara.iara_api.util.geo.GeoUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -129,6 +131,8 @@ public class EventoService {
         registrarHistorico(e, de, "ATIVO", gestor, "Evento aprovado");
         notificarTecnicos(e);
         pcNotificacaoService.notificarPcsProximos(e);
+        applicationEventPublisher.publishEvent(
+                new EventoAprovadoEvent(e.getId(), e.getTenant().getId(), gestor.getId()));
         return EventoDTO.from(e, upvoteRepository.countByEventoId(e.getId()));
     }
 
@@ -149,6 +153,8 @@ public class EventoService {
             applicationEventPublisher.publishEvent(new EventoEncerradoEvent(e.getId(), "ENCERRADO"));
         }
         registrarHistorico(e, de, req.status(), gestor, req.observacao());
+        applicationEventPublisher.publishEvent(
+                new EventoStatusChangedEvent(e.getId(), e.getTenant().getId(), de, req.status()));
         return EventoDTO.from(e, upvoteRepository.countByEventoId(e.getId()));
     }
 

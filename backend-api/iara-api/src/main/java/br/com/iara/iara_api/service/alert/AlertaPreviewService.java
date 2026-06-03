@@ -37,7 +37,8 @@ public class AlertaPreviewService {
         List<UUID> visibleTenants = tenantScope.baseVisibleTenantIds(u);
         Set<UUID> ids = targetingService.targetDangerZone(
                 req.idZonaRisco(), req.todasZonas(), req.geofenceModes(),
-                req.raioMetros(), visibleTenants);
+                req.raioMetros(), visibleTenants,
+                req.lastHours(), req.frequentMinDays(), req.frequentLastDays());
         String dedup = AlertaCooldownService.dedupKey("DZ",
                 req.todasZonas() ? "ALL" : req.idZonaRisco(),
                 req.severidade(), String.join(",", req.geofenceModes()));
@@ -51,7 +52,8 @@ public class AlertaPreviewService {
         List<UUID> visibleTenants = tenantScope.baseVisibleTenantIds(u);
         Set<UUID> ids = targetingService.targetEventZone(
                 req.idEvento(), req.todosEventos(), req.geofenceModes(),
-                req.raioMetros(), visibleTenants);
+                req.raioMetros(), visibleTenants,
+                req.lastHours(), req.frequentMinDays(), req.frequentLastDays());
         String dedup = AlertaCooldownService.dedupKey("EZ",
                 req.todosEventos() ? "ALL" : req.idEvento(),
                 req.severidade(), String.join(",", req.geofenceModes()));
@@ -129,7 +131,8 @@ public class AlertaPreviewService {
         List<UUID> visibleTenants = tenantScope.baseVisibleTenantIds(u);
         Set<UUID> ids = targetingService.targetPersonalized(
                 req.coordenadas(), req.raioMetros(), req.geofenceModes(),
-                req.targetRole(), tenantAlvo, visibleTenants);
+                req.targetRole(), tenantAlvo, visibleTenants,
+                req.lastHours(), req.frequentMinDays(), req.frequentLastDays());
         String dedup = AlertaCooldownService.dedupKey("PZ", tenantAlvo, req.targetRole(),
                 req.severidade(), req.titulo());
         boolean cooldown = cooldownService.isActive("PERSONALIZED", u.getTenant().getId(), dedup);

@@ -45,7 +45,8 @@ public class SecurityConfig {
                                 "/auth/refresh",
                                 "/auth/logout",
                                 "/health",
-                                "/usuarios/cadastro/**"
+                                "/usuarios/cadastro/**",
+                                "/ws/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

@@ -332,7 +332,73 @@ function OverviewTab({
           />
         </Card>
       )}
+
+      {alerta.expansionRadiiMetros.length > 0 && (
+        <Card className="lg:col-span-3">
+          <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+            Expansão automática de raio
+          </h3>
+          <RadiusExpansionTimeline alerta={alerta} />
+        </Card>
+      )}
     </div>
+  );
+}
+
+function RadiusExpansionTimeline({
+  alerta,
+}: {
+  alerta: ReturnType<typeof useAlerta>['data'] & object;
+}) {
+  const radii = alerta.expansionRadiiMetros;
+  const currentStep = alerta.currentExpansionStep;
+  const windowMin = alerta.expansionWindowMinutes ?? 5;
+  const completed = currentStep >= radii.length - 1;
+  return (
+    <>
+      <div className="mb-4 flex items-center gap-1">
+        {radii.map((r, i) => {
+          const isCurrent = i === currentStep;
+          const reached = i <= currentStep;
+          const color = isCurrent ? '#3B82F6' : reached ? '#22C55E' : '#64748B';
+          return (
+            <div key={i} className="flex items-center gap-1 flex-1">
+              <div
+                className="flex h-8 w-full items-center justify-center rounded text-[11px] font-bold"
+                style={{
+                  background: `${color}22`,
+                  color,
+                  border: `1px solid ${color}55`,
+                }}
+              >
+                {(r / 1000).toFixed(1)} km
+              </div>
+              {i < radii.length - 1 && (
+                <span className="text-ink-muted">→</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-1 gap-2 text-[12px] text-ink-secondary md:grid-cols-3">
+        <span>
+          <strong className="text-ink-primary">Raio atual:</strong>{' '}
+          {((alerta.raioMetros ?? 0) / 1000).toFixed(1)} km
+        </span>
+        <span>
+          <strong className="text-ink-primary">Janela:</strong> {windowMin} min entre expansões
+        </span>
+        <span>
+          <strong className="text-ink-primary">Última expansão:</strong>{' '}
+          {alerta.lastExpansionAt ? new Date(alerta.lastExpansionAt).toLocaleString('pt-BR') : '—'}
+        </span>
+      </div>
+      {completed && (
+        <p className="mt-3 text-[12px] text-yellow-400">
+          ⚠ Expansão máxima atingida. Considere chamar reforços manualmente.
+        </p>
+      )}
+    </>
   );
 }
 

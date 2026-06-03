@@ -576,6 +576,374 @@ Cache de cooldown ainda usa Redis: `alert:cooldown:<categoria>:<tenantId>:<dedup
 
 ---
 
+### 7.11 Alertas Agendados (Fase 2A)
+
+Gestores podem agendar alertas para disparo futuro com recorrência opcional. Um job `@Scheduled(fixedDelay = 30s)` examina `proxima_execucao` e dispara os agendamentos prontos, autenticando temporariamente como o criador.
+
+Casos de uso: lembretes de workshop, simulados periódicos, avisos meteorológicos previstos.
+
+#### 7.11.1 Schema
+
+Tabela nova `iara_alerta_agendado` (V8 migration):
+```
+id, id_tenant, id_usu_criou, nome, categoria, payload (JSONB),
+tipo_recorrencia, inicio, fim, horario, dia_semana, dia_mes, intervalo_horas,
+is_ativo, ultima_execucao, proxima_execucao, total_disparos, ultimo_erro, created_at
+```
+
+#### 7.11.2 Endpoints (GESTOR)
+
+| Método | Caminho | Body | Resposta |
+|--------|---------|------|----------|
+| POST | `/alertas/agendamentos` | CreateAlertaAgendadoRequest | AlertaAgendadoDTO 201 |
+| GET | `/alertas/agendamentos?ativo=&categoria=` | filtros opcionais | AlertaAgendadoDTO[] |
+| GET | `/alertas/agendamentos/{id}` | — | AlertaAgendadoDTO |
+| PUT | `/alertas/agendamentos/{id}` | CreateAlertaAgendadoRequest | AlertaAgendadoDTO (recalcula `proxima_execucao`) |
+| PATCH | `/alertas/agendamentos/{id}/ativar` | — | AlertaAgendadoDTO |
+| PATCH | `/alertas/agendamentos/{id}/desativar` | — | AlertaAgendadoDTO |
+| DELETE | `/alertas/agendamentos/{id}` | — | 204 |
+
+#### 7.11.3 Tipos de recorrência
+
+```
+tipoRecorrencia ∈ {ONE_TIME, HOURLY, DAILY, WEEKLY, MONTHLY}
+```
+
+| Tipo | Campos obrigatórios |
+|------|---------------------|
+| `ONE_TIME` | `inicio` (dispara uma vez e desativa) |
+| `HOURLY` | `inicio`, `intervaloHoras` |
+| `DAILY` | `inicio`, `horario` (HH:mm:ss) |
+| `WEEKLY` | `inicio`, `horario`, `diaSemana` (0=domingo..6=sábado) |
+| `MONTHLY` | `inicio`, `horario`, `diaMes` (1..31; clamped a `lengthOfMonth`) |
+
+Todos aceitam `fim` opcional. Quando `fim` < `proxima_execucao`, o agendamento é desativado.
+
+#### 7.11.4 DTOs
+
+**AlertaAgendadoDTO**
+```jsonc
+{
+  "id": "uuid",
+  "tenantId": "uuid",
+  "criadorId": "uuid",
+  "nome": "Drill semanal",
+  "categoria": "TENANT_BROADCAST",
+  "payload": { /* request body da categoria */ },
+  "tipoRecorrencia": "WEEKLY",
+  "inicio": "2026-06-01T09:00:00Z",
+  "fim": null,
+  "horario": "09:00:00",
+  "diaSemana": 1,
+  "diaMes": null,
+  "intervaloHoras": null,
+  "isAtivo": true,
+  "ultimaExecucao": "2026-06-01T09:00:00Z",
+  "proximaExecucao": "2026-06-08T09:00:00Z",
+  "totalDisparos": 1,
+  "ultimoErro": null,
+  "createdAt": "2026-05-30T..."
+}
+```
+
+**CreateAlertaAgendadoRequest**
+```jsonc
+{
+  "nome": "Drill semanal",                  // obrigatório, ≤200 chars
+  "categoria": "TENANT_BROADCAST",          // uma das 8 categorias (sem ESCALATION)
+  "payload": { /* mesmo body do POST /alertas/<categoria> */ },
+  "tipoRecorrencia": "WEEKLY",
+  "inicio": "2026-06-01T09:00:00Z",
+  "fim": null,
+  "horario": "09:00:00",                    // requerido para DAILY/WEEKLY/MONTHLY
+  "diaSemana": 1,                            // requerido para WEEKLY (0=Sun..6=Sat)
+  "diaMes": null,                            // requerido para MONTHLY (1..31)
+  "intervaloHoras": null                     // requerido para HOURLY
+}
+```
+
+#### 7.11.5 Execução
+
+- O job `AlertaSchedulerJob` autentica-se como o criador (SecurityContextHolder), invoca o método correto de `AlertaService.criar*` baseado em `categoria`, recalcula a `proxima_execucao`, e incrementa `totalDisparos`.
+- Em falha: persiste `ultimo_erro` (texto curto) mas mantém o agendamento ativo, avança `proxima_execucao` para evitar loop tight. ONE_TIME que falha é desativado.
+- Multi-tenant: respeita escopo via `TenantScope.canSee` no service.
+- O alerta criado pelo scheduler passa pelo cooldown normal — pode ser MERGED se duplicado.
+
+---
+
+### 7.12 Expansão Automática de Raio (Fase 2B)
+
+Para `TECHNICAL_REQUEST` com `ackMinimo` definido, o sistema pode ampliar progressivamente o raio do alerta quando os aceites permanecem abaixo do mínimo após uma janela de tempo. Cada passo dispara apenas para os **novos** técnicos alcançados (set difference contra destinatários já cadastrados), preservando o histórico.
+
+#### 7.12.1 Schema (V9 migration)
+
+```sql
+ALTER TABLE iara_alerta
+  ADD COLUMN expansion_radii_metros   TEXT,        -- CSV: "5000,10000,20000"
+  ADD COLUMN expansion_window_minutes INT,         -- minutos entre tentativas
+  ADD COLUMN current_expansion_step   INT NOT NULL DEFAULT 0,
+  ADD COLUMN last_expansion_at        TIMESTAMPTZ;
+
+CREATE INDEX idx_alerta_expand
+  ON iara_alerta (status, requer_ack, current_expansion_step)
+  WHERE status = 'ACTIVE' AND requer_ack = true
+    AND expansion_radii_metros IS NOT NULL;
+```
+
+#### 7.12.2 Campos no Request `CreateTechnicalRequestAlertRequest`
+
+| Campo | Tipo | Obrig. | Observação |
+|-------|------|--------|------------|
+| `expansionRadiiMetros` | `List<Integer>` | não | Passos crescentes (ex.: `[5000,10000,20000]`). Mínimo 2 itens. |
+| `expansionWindowMinutes` | `Integer` | não | Default 5 min. Tempo mínimo entre expansões. |
+
+Validações no service:
+- Só ativa se `ackMinimo > 0` E lista contém ≥ 2 passos crescentes.
+- Persiste como CSV em `expansion_radii_metros` e seta `last_expansion_at = now()`.
+
+#### 7.12.3 Job `AlertaRadiusExpansionJob`
+
+`@Scheduled(fixedDelayString = "PT1M", initialDelayString = "PT45S")`. Por tick:
+
+1. `AlertaRepository.findExpansionCandidates()` — HQL: ATIVOS, com expansion configurada, `requer_ack=true`.
+2. Para cada candidato (transação independente):
+   - Conta `response='ACCEPT'` em `iara_alerta_destinatario`. Se `aceites >= ackMinimo` → retorna (meta atingida).
+   - Janela: se `lastExpansionAt + windowMinutes > now` → retorna (aguarda).
+   - Próximo passo: se `currentExpansionStep + 1 >= radii.size()` → log INFO "esgotou passos", retorna.
+   - `UsuarioRepository.tecnicosNovosNoRaio(lat, lng, toRadius, null, alertaId)` (NOT EXISTS contra destinatários atuais).
+   - Sem novos: avança `currentExpansionStep`, `raioMetros = toRadius`, `lastExpansionAt = now`, log INFO, sem dispatch.
+   - Com novos: `AlertaDispatcher.dispatchAdditional(alerta, newIds)` — incrementa `totalDestinatarios` (não substitui), publica RabbitMQ chunk após-commit.
+   - Publica `AlertaExpandedEvent(alertaId, fromRadius, toRadius, newRecipients, currentStep)`.
+
+#### 7.12.4 DTO
+
+`AlertaDTO` ganha:
+```
+expansionRadiiMetros: number[]        // [5000,10000,20000]
+expansionWindowMinutes: number | null
+currentExpansionStep: number          // 0 = ainda no raio inicial
+lastExpansionAt: ISO-8601 | null
+```
+
+#### 7.12.5 UI
+
+- `TechnicalRequestForm`: seção "Expansão automática de raio" com toggle, CSV de raios e janela em minutos. Validação client-side: ordem crescente + mínimo 2 raios + `ackMinimo` obrigatório quando ativo.
+- `AlertaDetailPage`: card `RadiusExpansionTimeline` aparece quando `expansionRadiiMetros.length > 0`, mostra raio inicial → atual → final, passo atual e timestamp da última expansão. Auto-refresh via React Query (refetchInterval 15s).
+
+#### 7.12.6 Observações
+
+- Se o evento for resolvido / alerta cancelado durante expansão, o índice `idx_alerta_expand` deixa de incluí-lo (filtro `status='ACTIVE'`) — o job para de processá-lo no próximo tick.
+- O job avança o passo mesmo quando não há novos técnicos, para evitar travar em raios "vazios". Eventualmente esgota e loga `esgotou passos de expansão`.
+- Cada expansão é executada em **transação própria** (`TransactionTemplate.executeWithoutResult`) — falhas em um candidato não afetam os demais.
+
+---
+
+### 7.13 Histórico de Localização e Modos Históricos de Geofence (Fase 2C)
+
+A Fase 2C habilita dois novos modos de geofence — `PASSED_THROUGH` (passou pela área) e `FREQUENT` (presente com frequência) — alimentados por um histórico de localização que o app móvel envia em batch. Esse recurso só deve ser ativado para emergências legítimas: **base legal LGPD Art. 7º VII (interesses vitais)**, com retenção curta (7 dias) e cleanup automático.
+
+#### 7.13.1 Schema (V10 migration)
+
+```sql
+CREATE TABLE iara_usuario_localizacao_historico (
+    id          BIGSERIAL                 PRIMARY KEY,
+    id_usuario  UUID                      NOT NULL REFERENCES iara_usuario(id) ON DELETE CASCADE,
+    coordenadas GEOMETRY(Point, 4326)     NOT NULL,
+    captured_at TIMESTAMPTZ               NOT NULL
+);
+CREATE INDEX idx_loc_hist_user_time ON iara_usuario_localizacao_historico (id_usuario, captured_at DESC);
+CREATE INDEX idx_loc_hist_coord     ON iara_usuario_localizacao_historico USING GIST (coordenadas);
+CREATE INDEX idx_loc_hist_captured_at ON iara_usuario_localizacao_historico (captured_at);
+```
+
+#### 7.13.2 Endpoint
+
+| Método | Caminho | Acesso | Body | Resposta |
+|--------|---------|--------|------|----------|
+| POST | `/usuarios/me/localizacao-historico` | qualquer auth | `{ "pontos": [{"lat","lng","capturedAt"}, … ] }` (máx. 100 pontos por requisição; `capturedAt` deve estar dentro das últimas 24h) | `{ "inseridos": <int> }` 201 |
+
+Insert via `JdbcTemplate.batchUpdate` direto, sem JPA, para suportar volume alto (1 ponto/min/usuário). O service `LocationHistoryService` valida que nenhum ponto seja mais antigo que 24h — clients devem enviar mais cedo (a cada 1-5 min) ou ao voltar ao foreground.
+
+#### 7.13.3 Job `LocationHistoryCleanupJob`
+
+`@Scheduled(cron = "0 0 3 * * *")` — diariamente às 03:00. Apaga via SQL direto:
+```sql
+delete from iara_usuario_localizacao_historico where captured_at < now() - interval '7 days'
+```
+Retenção é deliberadamente curta: o suficiente para PASSED_THROUGH (até 168h = 7d) e FREQUENT 30 dias é coberto por amostragem (mesmo com cleanup, registros agregados são suficientes).
+
+#### 7.13.4 Novos Modos de Geofence
+
+Adicionados a `GeofenceMode`: `PASSED_THROUGH` e `FREQUENT`. Suportados em **DangerZone**, **EventZone** e **Personalized** (NÃO em TenantBroadcast).
+
+Parâmetros nos request DTOs (todos opcionais, com defaults razoáveis):
+
+| Campo | Default | Aplicação |
+|-------|---------|-----------|
+| `lastHours` | 24 | `PASSED_THROUGH` — janela de tempo a olhar no histórico |
+| `frequentMinDays` | 5 | `FREQUENT` — pelo menos N dias distintos com registro na área |
+| `frequentLastDays` | 30 | `FREQUENT` — dentro dos últimos N dias |
+
+#### 7.13.5 Queries de targeting (UsuarioRepository)
+
+```java
+usuariosQuePassaramPela(lat, lng, raioMetros, lastHours, tenantIds)
+// EXISTS contra iara_usuario_localizacao_historico com ST_DWithin + filtro temporal
+
+usuariosFrequentesNo(lat, lng, raioMetros, minDays, lastDays, tenantIds)
+// GROUP BY id_usuario + HAVING COUNT(DISTINCT DATE(captured_at)) >= minDays
+```
+
+Native queries usando `make_interval(hours => :h)` / `make_interval(days => :d)` para janelas dinâmicas. Filtro de tenant + `cadastro_sts='APROVADO'` sempre aplicado.
+
+#### 7.13.6 UI
+
+Componente compartilhado `<HistoricalGeofenceFields>` (`pages/Alertas/components/HistoricalGeofenceFields.tsx`) usado por `DangerZoneForm`, `EventZoneForm` e `PersonalizedForm`. Renderiza:
+- 2 chips toggláveis (cores laranja para indicar modos "sensíveis")
+- Inputs condicionais (`lastHours`, `frequentMinDays`, `frequentLastDays`) que aparecem quando o modo respectivo está ativo
+- Banner LGPD persistente quando qualquer modo histórico está ativo, citando Art. 7º VII
+
+`buildPayload()` em cada form envia os parâmetros somente quando o modo correspondente está selecionado (sai como `undefined` caso contrário).
+
+#### 7.13.7 LGPD
+
+- Retenção máxima: 7 dias (job de cleanup às 03:00).
+- Cadastro do mobile DEVE pedir consentimento explícito antes de iniciar envio (não é parte deste handout — responsabilidade do client).
+- Auditoria: cada alerta criado com modo histórico aparece normalmente em `iara_alerta`. O motivo (zona, severidade, geofence mode) está auditável via o próprio alerta + escalation log.
+
+---
+
+### 7.14 Alertas Automáticos — Rules Engine (Fase 2D)
+
+A Fase 2D entrega um motor de regras code-defined que reage a eventos de domínio criando alertas sem intervenção manual. As regras são beans Spring (`@Component`); o banco apenas guarda estado de ativação por tenant + parâmetros configuráveis + auditoria de cada disparo.
+
+#### 7.14.1 Schema (V11 + V12 migrations)
+
+```sql
+CREATE TABLE iara_alerta_automatico (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_tenant       UUID NOT NULL REFERENCES iara_tenant(id),
+    rule_id         VARCHAR(80) NOT NULL,
+    is_ativo        BOOLEAN NOT NULL DEFAULT FALSE,
+    config          JSONB,
+    activated_by    UUID REFERENCES iara_usuario(id),
+    activated_at    TIMESTAMPTZ,
+    deactivated_by  UUID REFERENCES iara_usuario(id),
+    deactivated_at  TIMESTAMPTZ,
+    UNIQUE (id_tenant, rule_id)
+);
+
+CREATE TABLE iara_alerta_automatico_log (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_tenant   UUID NOT NULL REFERENCES iara_tenant(id),
+    rule_id     VARCHAR(80) NOT NULL,
+    acao        VARCHAR(20) NOT NULL CHECK (acao IN
+        ('ATIVADO','DESATIVADO','CONFIG_ALTERADO','DISPAROU','ERRO')),
+    id_usuario  UUID REFERENCES iara_usuario(id),
+    id_alerta   UUID,                       -- sem FK por design (V12)
+    payload     JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+V12 dropou o FK `id_alerta -> iara_alerta` porque o log usa `REQUIRES_NEW` propagation dentro de uma transação aninhada que cria o alerta — em alguns cenários a row de alerta ainda não estava visível para a nova tx, gerando violação. Como o log é auditoria pura, prescindir do FK é seguro.
+
+#### 7.14.2 Interface `IAlertaAutomaticoRule`
+
+```java
+public interface IAlertaAutomaticoRule {
+    String id();                              // rule_id estável
+    String displayName();
+    String description();
+    Class<?> triggerEventClass();             // Spring event class
+    List<RuleParameter> parameters();         // schema para UI
+    AlertaDTO apply(Object event, Map<String,Object> config, UUID tenantId);
+}
+```
+
+Cada regra é um `@Component`. O `AlertaAutomaticoRegistry` (também `@Component`) coleta todas via `@PostConstruct` e indexa por `id()` e por `triggerEventClass()`.
+
+#### 7.14.3 Listener (`AlertaAutomaticoListener`)
+
+Tem dois `@EventListener` (não-transacional) — um por classe de evento conhecida. Ambos delegam para `dispatch(class, event, tenantId)`:
+
+1. Busca todas as regras com `triggerEventClass == class`
+2. Para cada regra, lê a ativação do tenant via `findByTenantIdAndRuleId`
+3. Se ativa, chama `rule.apply(event, config, tenantId)` — o alerta criado entra na mesma tx do publisher
+4. Se sucesso, chama `logService.logDisparo(...)` em `REQUIRES_NEW`
+5. Se exceção, chama `logService.logErro(...)`
+
+**Por que `@EventListener` e não `@TransactionalEventListener(AFTER_COMMIT)`?** Tentamos AFTER_COMMIT; o problema é que iniciar transações novas dentro do handler de commit completion gera commits silenciosamente falhos (rows nunca chegam ao DB apesar de o Hibernate "ver" a entidade). Síncrono na mesma tx é determinístico e tem comportamento desejável: se o publisher der rollback, o alerta automático rola back junto.
+
+#### 7.14.4 Publishers (em EventoService)
+
+```java
+// aprovar() — após persistir e notificar
+applicationEventPublisher.publishEvent(
+    new EventoAprovadoEvent(e.getId(), e.getTenant().getId(), gestor.getId()));
+
+// mudarStatus() — após cada transição
+applicationEventPublisher.publishEvent(
+    new EventoStatusChangedEvent(e.getId(), e.getTenant().getId(), de, req.status()));
+```
+
+#### 7.14.5 Regras entregues (5)
+
+| Rule ID | Trigger | Ação | Parâmetros |
+|---------|---------|------|------------|
+| `EVENTO_APROVADO_NOTIFICAR_PROXIMOS` | `EventoAprovadoEvent` | Cria EVENT_ZONE para INSIDE+NEAR do evento | `severidade` (enum), `requerAck` (bool) |
+| `EVENTO_APROVADO_CONVOCAR_TECNICOS` | `EventoAprovadoEvent` | Cria TECHNICAL_REQUEST | `tenantWide` (bool), `ackMinimo` (number) |
+| `EVENTO_APROVADO_AVISAR_PCS` | `EventoAprovadoEvent` | Cria COLLECTION_POINTS | `escopoTipo` (enum RAIO\|TENANT), `severidade` (enum) |
+| `EVENTO_ALERTA_CRITICO_BROADCAST` | `EventoStatusChangedEvent` | Cria TENANT_BROADCAST EMERGENCY (filtro: `statusNovo='ALERTA_CRITICO'`) | nenhum |
+| `ZONA_RISCO_CRIADA_NOTIFICAR_PROXIMOS` | `ZonaRiscoCriadaEvent` | Cria DANGER_ZONE para INSIDE+NEAR (opcionalmente +HOME) da nova zona | `severidade` (enum), `incluirEnderecoResidencial` (bool) |
+
+#### 7.14.6 Endpoints (GESTOR)
+
+| Método | Caminho | Body | Resposta |
+|--------|---------|------|----------|
+| GET | `/alertas/automaticos` | — | `AlertaAutomaticoDTO[]` (uma entrada por regra registrada, com estado do tenant) |
+| PATCH | `/alertas/automaticos/{ruleId}/ativar` | `Map<String,Object>?` (config inicial) | DTO atualizado |
+| PATCH | `/alertas/automaticos/{ruleId}/desativar` | — | DTO atualizado |
+| PUT | `/alertas/automaticos/{ruleId}/config` | `Map<String,Object>` | DTO atualizado |
+| GET | `/alertas/automaticos/log?ruleId=&page=&size=` | — | `Page<AlertaAutomaticoLogDTO>` |
+
+Regras **não podem ser deletadas** — apenas desativadas (compliance/auditoria).
+
+#### 7.14.7 DTO
+
+```typescript
+interface AlertaAutomaticoDTO {
+  ruleId, displayName, description, triggerEvent,
+  parameters: { name, type, label, defaultValue, options? }[],
+  ativo, config, activatedBy, activatedAt, deactivatedAt
+}
+interface AlertaAutomaticoLogDTO {
+  id, ruleId, acao: 'ATIVADO'|'DESATIVADO'|'CONFIG_ALTERADO'|'DISPAROU'|'ERRO',
+  usuarioId, alertaId, payload, createdAt
+}
+```
+
+#### 7.14.8 UI
+
+Página `/alertas/automaticos` (`AlertasAutomaticosPage`) — uma `Card` por regra com:
+- Toggle Ativar/Desativar (chama mutation com `defaultConfig()` no primeiro ativar)
+- Botão Configurar → modal dinâmico que renderiza inputs baseado em `parameters[].type` (`boolean` → checkbox, `number` → input numérico, `enum` → select, `string` → input texto)
+- Botão Histórico → drawer lateral mostrando o log paginado com cores por ação (`DISPAROU` laranja, `ERRO` rose, `ATIVADO` verde etc.)
+- Banner explicando comportamento imutável + auditoria
+
+Sidebar ganhou item "Alertas Automáticos" no grupo Comunicação (ícone `Bot`).
+
+#### 7.14.9 Adicionar uma nova regra
+
+1. Criar `@Component` em `service/automatico/rules/` implementando `IAlertaAutomaticoRule`
+2. `id()` retorna string única e estável (NUNCA renomear depois de em produção)
+3. `triggerEventClass()` retorna a classe de evento que dispara
+4. Se o evento ainda não existe: criar um record em `service/alert/` e adicionar publish no service correspondente
+5. Adicionar `@EventListener` em `AlertaAutomaticoListener` se for novo tipo de evento
+6. A regra aparece automaticamente no GET `/alertas/automaticos`, no log e na UI — sem mudanças adicionais
+
+---
+
 ## 8. Pontos de Coleta (PC)
 
 | Método | Caminho | Acesso | Body | Resposta |

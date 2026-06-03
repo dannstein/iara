@@ -5,6 +5,7 @@ import br.com.iara.iara_api.dto.alerta.*;
 import br.com.iara.iara_api.repository.AlertaAgendadoRepository;
 import br.com.iara.iara_api.service.AlertaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,8 +37,10 @@ public class AlertaSchedulerJob {
 
     private final AlertaAgendadoRepository repository;
     private final AlertaService alertaService;
-    private final ObjectMapper objectMapper;
     private final PlatformTransactionManager txManager;
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule());
 
     @Scheduled(fixedDelayString = "PT30S", initialDelayString = "PT15S")
     public void runScheduler() {
@@ -90,21 +93,21 @@ public class AlertaSchedulerJob {
         Object payload = a.getPayload();
         switch (a.getCategoria()) {
             case "DANGER_ZONE" -> alertaService.criarDangerZone(
-                    objectMapper.convertValue(payload, CreateDangerZoneAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateDangerZoneAlertRequest.class));
             case "EVENT_ZONE" -> alertaService.criarEventZone(
-                    objectMapper.convertValue(payload, CreateEventZoneAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateEventZoneAlertRequest.class));
             case "TENANT_BROADCAST" -> alertaService.criarTenantBroadcast(
-                    objectMapper.convertValue(payload, CreateTenantBroadcastRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateTenantBroadcastRequest.class));
             case "TECHNICAL_REQUEST" -> alertaService.criarTechnicalRequest(
-                    objectMapper.convertValue(payload, CreateTechnicalRequestAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateTechnicalRequestAlertRequest.class));
             case "SUPPORT_POINTS" -> alertaService.criarSupportPoints(
-                    objectMapper.convertValue(payload, CreateSupportPointsAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateSupportPointsAlertRequest.class));
             case "COLLECTION_POINTS" -> alertaService.criarCollectionPoints(
-                    objectMapper.convertValue(payload, CreateCollectionPointsAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateCollectionPointsAlertRequest.class));
             case "MONITORS" -> alertaService.criarMonitors(
-                    objectMapper.convertValue(payload, CreateMonitorsAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreateMonitorsAlertRequest.class));
             case "PERSONALIZED" -> alertaService.criarPersonalized(
-                    objectMapper.convertValue(payload, CreatePersonalizedAlertRequest.class));
+                    OBJECT_MAPPER.convertValue(payload, CreatePersonalizedAlertRequest.class));
             default -> throw new IllegalArgumentException("Categoria não suportada: " + a.getCategoria());
         }
     }

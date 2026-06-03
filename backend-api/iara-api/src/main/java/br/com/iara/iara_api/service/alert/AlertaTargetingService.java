@@ -40,6 +40,13 @@ public class AlertaTargetingService {
     @Transactional(readOnly = true)
     public Set<UUID> targetDangerZone(UUID zonaId, boolean todasZonas, List<String> geofenceModes,
                                        Integer raioMetros, List<UUID> tenantIds) {
+        return targetDangerZone(zonaId, todasZonas, geofenceModes, raioMetros, tenantIds, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> targetDangerZone(UUID zonaId, boolean todasZonas, List<String> geofenceModes,
+                                       Integer raioMetros, List<UUID> tenantIds,
+                                       Integer lastHours, Integer frequentMinDays, Integer frequentLastDays) {
         Set<UUID> result = new HashSet<>();
         List<ZonaRisco> zonas = todasZonas
                 ? zonaRiscoRepository.findByTenantIdInAndIsActiveTrueOrderByNivelRiscoDesc(tenantIds)
@@ -60,15 +67,28 @@ public class AlertaTargetingService {
                     result.add(u.getId());
                 }
             }
-            if (geofenceModes.contains("NEAR")) {
-                Point center = centerOf(z.getGeometria());
-                if (center != null) {
-                    for (Usuario u : usuarioRepository.usuariosNoRaio(center.getY(), center.getX(), raio, List.of(tenantId))) {
-                        result.add(u.getId());
-                    }
+            Point center = null;
+            if (geofenceModes.contains("NEAR") || geofenceModes.contains("PASSED_THROUGH") || geofenceModes.contains("FREQUENT")) {
+                center = centerOf(z.getGeometria());
+            }
+            if (geofenceModes.contains("NEAR") && center != null) {
+                for (Usuario u : usuarioRepository.usuariosNoRaio(center.getY(), center.getX(), raio, List.of(tenantId))) {
+                    result.add(u.getId());
                 }
             }
-            // WORK e modos históricos (PASSED, FREQUENT) → Fase 2
+            if (geofenceModes.contains("PASSED_THROUGH") && center != null) {
+                int hours = lastHours != null ? lastHours : 24;
+                for (Usuario u : usuarioRepository.usuariosQuePassaramPela(center.getY(), center.getX(), raio, hours, List.of(tenantId))) {
+                    result.add(u.getId());
+                }
+            }
+            if (geofenceModes.contains("FREQUENT") && center != null) {
+                int minDays = frequentMinDays != null ? frequentMinDays : 5;
+                int lastDays = frequentLastDays != null ? frequentLastDays : 30;
+                for (Usuario u : usuarioRepository.usuariosFrequentesNo(center.getY(), center.getX(), raio, minDays, lastDays, List.of(tenantId))) {
+                    result.add(u.getId());
+                }
+            }
         }
         return result;
     }
@@ -76,6 +96,13 @@ public class AlertaTargetingService {
     @Transactional(readOnly = true)
     public Set<UUID> targetEventZone(UUID eventoId, boolean todosEventos, List<String> geofenceModes,
                                       Integer raioMetros, List<UUID> tenantIds) {
+        return targetEventZone(eventoId, todosEventos, geofenceModes, raioMetros, tenantIds, null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> targetEventZone(UUID eventoId, boolean todosEventos, List<String> geofenceModes,
+                                      Integer raioMetros, List<UUID> tenantIds,
+                                      Integer lastHours, Integer frequentMinDays, Integer frequentLastDays) {
         Set<UUID> result = new HashSet<>();
         List<Evento> eventos;
         if (todosEventos) {
@@ -102,6 +129,23 @@ public class AlertaTargetingService {
             }
             if (geofenceModes.contains("HOME")) {
                 for (Usuario u : usuarioRepository.usuariosComEnderecoNoRaioDoEvento(e.getId(), raio, tenantId)) {
+                    result.add(u.getId());
+                }
+            }
+            if (geofenceModes.contains("PASSED_THROUGH") && e.getCoordenadas() != null) {
+                int hours = lastHours != null ? lastHours : 24;
+                double lat = e.getCoordenadas().getY();
+                double lng = e.getCoordenadas().getX();
+                for (Usuario u : usuarioRepository.usuariosQuePassaramPela(lat, lng, raio, hours, List.of(tenantId))) {
+                    result.add(u.getId());
+                }
+            }
+            if (geofenceModes.contains("FREQUENT") && e.getCoordenadas() != null) {
+                int minDays = frequentMinDays != null ? frequentMinDays : 5;
+                int lastDays = frequentLastDays != null ? frequentLastDays : 30;
+                double lat = e.getCoordenadas().getY();
+                double lng = e.getCoordenadas().getX();
+                for (Usuario u : usuarioRepository.usuariosFrequentesNo(lat, lng, raio, minDays, lastDays, List.of(tenantId))) {
                     result.add(u.getId());
                 }
             }
@@ -243,6 +287,14 @@ public class AlertaTargetingService {
     @Transactional(readOnly = true)
     public Set<UUID> targetPersonalized(CoordenadasDTO coordenadas, Integer raioMetros, List<String> geofenceModes,
                                          String targetRole, UUID tenantAlvo, List<UUID> tenantIds) {
+        return targetPersonalized(coordenadas, raioMetros, geofenceModes, targetRole, tenantAlvo, tenantIds,
+                null, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> targetPersonalized(CoordenadasDTO coordenadas, Integer raioMetros, List<String> geofenceModes,
+                                         String targetRole, UUID tenantAlvo, List<UUID> tenantIds,
+                                         Integer lastHours, Integer frequentMinDays, Integer frequentLastDays) {
         Set<UUID> result = new HashSet<>();
 
         // Sem coordenadas → trata como broadcast para tenant alvo + role
@@ -272,6 +324,23 @@ public class AlertaTargetingService {
         }
         if (modes.contains("HOME")) {
             for (Usuario u : usuarioRepository.usuariosComEnderecoNoRaio(coordenadas.lat(), coordenadas.lng(), raio, scopeTenants)) {
+                if (targetRole == null || targetRole.equals(u.getRole().getRoleNome())) {
+                    result.add(u.getId());
+                }
+            }
+        }
+        if (modes.contains("PASSED_THROUGH")) {
+            int hours = lastHours != null ? lastHours : 24;
+            for (Usuario u : usuarioRepository.usuariosQuePassaramPela(coordenadas.lat(), coordenadas.lng(), raio, hours, scopeTenants)) {
+                if (targetRole == null || targetRole.equals(u.getRole().getRoleNome())) {
+                    result.add(u.getId());
+                }
+            }
+        }
+        if (modes.contains("FREQUENT")) {
+            int minDays = frequentMinDays != null ? frequentMinDays : 5;
+            int lastDays = frequentLastDays != null ? frequentLastDays : 30;
+            for (Usuario u : usuarioRepository.usuariosFrequentesNo(coordenadas.lat(), coordenadas.lng(), raio, minDays, lastDays, scopeTenants)) {
                 if (targetRole == null || targetRole.equals(u.getRole().getRoleNome())) {
                     result.add(u.getId());
                 }

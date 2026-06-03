@@ -1,8 +1,10 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
+import { useAlertasWebsocket } from '@/hooks/useAlertasWebsocket';
 
 export function AppLayout() {
+  useAlertasWebsocket();
   const { pathname } = useLocation();
   // O mapa ocupa a área inteira (sem padding nem max-width).
   const isFullBleed = pathname.startsWith('/mapa');

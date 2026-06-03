@@ -7,6 +7,7 @@ import { apiErrorMessage } from '@/lib/api';
 import type { AlertaDTO, AlertaSeveridade, CreateEventZoneAlertInput, GeofenceMode } from '@/types/api';
 import { ExpirationFields, FormSection, MessageFields, SeverityField } from './common';
 import { PreviewPanel } from '../components/PreviewPanel';
+import { HistoricalGeofenceFields } from '../components/HistoricalGeofenceFields';
 
 const MODES: GeofenceMode[] = ['INSIDE', 'NEAR', 'HOME'];
 const MODE_LABEL: Record<GeofenceMode, string> = {
@@ -14,6 +15,8 @@ const MODE_LABEL: Record<GeofenceMode, string> = {
   NEAR: 'Próximos do evento (raio expandido)',
   HOME: 'Endereço residencial dentro do raio',
   WORK: 'Endereço de trabalho dentro do raio',
+  PASSED_THROUGH: 'Passou pela área',
+  FREQUENT: 'Frequente na área',
 };
 
 interface Props {
@@ -34,6 +37,9 @@ export function EventZoneForm({ onSuccess }: Props) {
   const [dataExpiracao, setDataExpiracao] = useState<string | undefined>();
   const [autoExpireMinutes, setAutoExpireMinutes] = useState<number | undefined>();
   const [requerAck, setRequerAck] = useState(false);
+  const [lastHours, setLastHours] = useState<number | undefined>();
+  const [frequentMinDays, setFrequentMinDays] = useState<number | undefined>();
+  const [frequentLastDays, setFrequentLastDays] = useState<number | undefined>();
 
   function toggleMode(m: GeofenceMode) {
     setModes((p) => (p.includes(m) ? p.filter((x) => x !== m) : [...p, m]));
@@ -59,6 +65,9 @@ export function EventZoneForm({ onSuccess }: Props) {
       dataExpiracao: dataExpiracao ? new Date(dataExpiracao).toISOString() : undefined,
       autoExpireMinutes,
       requerAck,
+      lastHours: modes.includes('PASSED_THROUGH') ? lastHours : undefined,
+      frequentMinDays: modes.includes('FREQUENT') ? frequentMinDays : undefined,
+      frequentLastDays: modes.includes('FREQUENT') ? frequentLastDays : undefined,
     };
   }
 
@@ -118,6 +127,16 @@ export function EventZoneForm({ onSuccess }: Props) {
             onChange={(e) => setRaioMetros(e.target.value ? Number(e.target.value) : undefined)}
           />
         </FormField>
+        <HistoricalGeofenceFields
+          modes={modes}
+          toggleMode={toggleMode}
+          lastHours={lastHours}
+          setLastHours={setLastHours}
+          frequentMinDays={frequentMinDays}
+          setFrequentMinDays={setFrequentMinDays}
+          frequentLastDays={frequentLastDays}
+          setFrequentLastDays={setFrequentLastDays}
+        />
       </FormSection>
 
       <FormSection title="Conteúdo">
