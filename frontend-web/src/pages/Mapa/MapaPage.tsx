@@ -232,12 +232,12 @@ export function MapaPage() {
       <div className="absolute right-4 top-4 z-[500]">
         <button
           onClick={() => setLayersOpen((o) => !o)}
-          className="flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-bg-elevated/95 px-3 text-[12px] font-medium text-ink-secondary backdrop-blur-sm hover:text-white"
+          className="flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-bg-elevated px-3 text-[12px] font-medium text-ink-secondary shadow-md hover:text-ink-primary"
         >
           <Layers size={15} /> Camadas
         </button>
         {layersOpen && (
-          <div className="mt-2 w-56 rounded-xl border border-white/10 bg-bg-elevated/95 p-3 shadow-lg backdrop-blur-sm">
+          <div className="mt-2 w-56 rounded-xl border border-white/10 bg-bg-elevated p-3 shadow-lg">
             {LAYERS.map((l) => (
               <label
                 key={l.id}
@@ -261,7 +261,7 @@ export function MapaPage() {
 
       {/* Painel lateral de detalhe do evento */}
       {selectedEvento && (
-        <div className="absolute bottom-0 right-0 top-0 z-[500] w-[380px] animate-slide-in overflow-y-auto border-l border-white/10 bg-bg-primary/95 p-6 backdrop-blur-sm">
+        <div className="absolute bottom-0 right-0 top-0 z-[500] w-[380px] animate-slide-in overflow-y-auto border-l border-white/10 bg-bg-primary p-6 shadow-2xl">
           <button
             onClick={() => setSelectedEvento(null)}
             className="btn-icon absolute right-4 top-4"

@@ -144,5 +144,82 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
             """, nativeQuery = true)
     List<Usuario> tecnicosDisponiveis(@Param("lat") double lat, @Param("lng") double lng,
                                       @Param("raio") int raio, @Param("especId") String especId);
+
+    /**
+     * Técnicos disponíveis em um raio EXCLUINDO os já presentes em iara_alerta_destinatario
+     * do alerta indicado. Usado pelo {@code AlertaRadiusExpansionJob} para identificar somente
+     * os novos usuários do passo de expansão.
+     */
+    @Query(value = """
+            select u.* from iara_usuario u
+            join iara_role r on r.id = u.id_role
+            where r.role_nome = 'TECNICO'
+              and u.esta_disponivel = true
+              and u.cadastro_sts = 'APROVADO'
+              and u.localizacao is not null
+              and (cast(:especId as uuid) is null or u.id_espec = cast(:especId as uuid))
+              and ST_DWithin(
+                    u.localizacao::geography,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                    :raio)
+              and not exists (
+                    select 1 from iara_alerta_destinatario d
+                    where d.id_alerta = cast(:alertaId as uuid) and d.id_usuario = u.id
+              )
+            """, nativeQuery = true)
+    List<Usuario> tecnicosNovosNoRaio(@Param("lat") double lat, @Param("lng") double lng,
+                                       @Param("raio") int raio, @Param("especId") String especId,
+                                       @Param("alertaId") String alertaId);
+
+    // ----------------------------------------------------- Fase 2C — modos históricos
+
+    /**
+     * Usuários que passaram por um ponto/raio nas últimas {@code lastHours} horas,
+     * conforme histórico em {@code iara_usuario_localizacao_historico}.
+     */
+    @Query(value = """
+            select distinct u.* from iara_usuario u
+            where u.id_tenant in (:tenantIds)
+              and u.cadastro_sts = 'APROVADO'
+              and exists (
+                  select 1 from iara_usuario_localizacao_historico h
+                  where h.id_usuario = u.id
+                    and h.captured_at > now() - make_interval(hours => :lastHours)
+                    and ST_DWithin(
+                          h.coordenadas::geography,
+                          ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                          :raioMetros)
+              )
+            """, nativeQuery = true)
+    List<Usuario> usuariosQuePassaramPela(@Param("lat") double lat, @Param("lng") double lng,
+                                          @Param("raioMetros") int raioMetros,
+                                          @Param("lastHours") int lastHours,
+                                          @Param("tenantIds") List<UUID> tenantIds);
+
+    /**
+     * Usuários frequentemente presentes no ponto/raio: ao menos {@code minDays} dias
+     * distintos com registro nos últimos {@code lastDays} dias.
+     */
+    @Query(value = """
+            select u.* from iara_usuario u
+            where u.id_tenant in (:tenantIds)
+              and u.cadastro_sts = 'APROVADO'
+              and u.id in (
+                  select h.id_usuario
+                    from iara_usuario_localizacao_historico h
+                   where h.captured_at > now() - make_interval(days => :lastDays)
+                     and ST_DWithin(
+                           h.coordenadas::geography,
+                           ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                           :raioMetros)
+                   group by h.id_usuario
+                  having count(distinct date_trunc('day', h.captured_at)) >= :minDays
+              )
+            """, nativeQuery = true)
+    List<Usuario> usuariosFrequentesNo(@Param("lat") double lat, @Param("lng") double lng,
+                                       @Param("raioMetros") int raioMetros,
+                                       @Param("minDays") int minDays,
+                                       @Param("lastDays") int lastDays,
+                                       @Param("tenantIds") List<UUID> tenantIds);
 }
 

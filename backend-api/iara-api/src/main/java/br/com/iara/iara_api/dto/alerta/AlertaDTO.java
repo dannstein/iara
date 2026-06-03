@@ -41,6 +41,10 @@ public record AlertaDTO(
         AckSummaryDTO ackSummary,
         int mergedCount,
         boolean merged,
+        List<Integer> expansionRadiiMetros,
+        Integer expansionWindowMinutes,
+        int currentExpansionStep,
+        OffsetDateTime lastExpansionAt,
         OffsetDateTime createdAt
 ) {
     public static AlertaDTO from(Alerta a, AckSummaryDTO ackSummary) {
@@ -79,8 +83,18 @@ public record AlertaDTO(
                 ackSummary,
                 a.getMergedCount(),
                 merged,
+                parseRadii(a.getExpansionRadiiMetros()),
+                a.getExpansionWindowMinutes(),
+                a.getCurrentExpansionStep(),
+                a.getLastExpansionAt(),
                 a.getCreatedAt()
         );
+    }
+
+    private static List<Integer> parseRadii(String csv) {
+        if (csv == null || csv.isBlank()) return List.of();
+        return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isEmpty())
+                .map(Integer::parseInt).toList();
     }
 
     public static AlertaDTO from(Alerta a) {

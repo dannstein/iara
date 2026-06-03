@@ -19,6 +19,8 @@ import { NovoAlertaPage } from '@/pages/Alertas/NovoAlertaPage';
 import { AlertaDetailPage } from '@/pages/Alertas/AlertaDetailPage';
 import { AgendamentosPage } from '@/pages/Alertas/AgendamentosPage';
 import { NovoAgendamentoPage } from '@/pages/Alertas/NovoAgendamentoPage';
+import { AlertasAutomaticosPage } from '@/pages/Alertas/AlertasAutomaticosPage';
+import { NotificacaoPrefsPage } from '@/pages/Perfil/NotificacaoPrefsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
@@ -46,7 +48,9 @@ export const router = createBrowserRouter([
           { path: 'alertas/novo', element: <NovoAlertaPage /> },
           { path: 'alertas/agendamentos', element: <AgendamentosPage /> },
           { path: 'alertas/agendamentos/novo', element: <NovoAgendamentoPage /> },
+          { path: 'alertas/automaticos', element: <AlertasAutomaticosPage /> },
           { path: 'alertas/:id', element: <AlertaDetailPage /> },
+          { path: 'perfil/notificacoes', element: <NotificacaoPrefsPage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },

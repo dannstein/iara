@@ -48,6 +48,7 @@ public class AlertaService {
     private final AlertaCooldownService cooldownService;
     private final AlertaTargetingService targetingService;
     private final AlertaDispatcher dispatcher;
+    private final br.com.iara.iara_api.service.alert.AlertaPushService pushService;
 
     // ============================================================================
     // CREATE — uma por categoria
@@ -90,7 +91,8 @@ public class AlertaService {
 
         Set<UUID> destinatarios = targetingService.targetDangerZone(
                 req.idZonaRisco(), req.todasZonas(), req.geofenceModes(),
-                req.raioMetros(), tenantScope.baseVisibleTenantIds(u));
+                req.raioMetros(), tenantScope.baseVisibleTenantIds(u),
+                req.lastHours(), req.frequentMinDays(), req.frequentLastDays());
         dispatcher.dispatch(a, destinatarios);
         return AlertaDTO.from(a, computeSummary(a.getId()));
     }
@@ -132,7 +134,8 @@ public class AlertaService {
 
         Set<UUID> destinatarios = targetingService.targetEventZone(
                 req.idEvento(), req.todosEventos(), req.geofenceModes(),
-                req.raioMetros(), tenantScope.baseVisibleTenantIds(u));
+                req.raioMetros(), tenantScope.baseVisibleTenantIds(u),
+                req.lastHours(), req.frequentMinDays(), req.frequentLastDays());
         dispatcher.dispatch(a, destinatarios);
         return AlertaDTO.from(a, computeSummary(a.getId()));
     }
@@ -195,6 +198,16 @@ public class AlertaService {
         a.setAckMinimo(req.ackMinimo());
         a.setDataExpiracao(req.dataExpiracao());
         a.setAutoExpireMinutes(req.autoExpireMinutes());
+        // Expansion config (2B): só faz sentido se ackMinimo > 0
+        if (req.expansionRadiiMetros() != null && !req.expansionRadiiMetros().isEmpty()
+                && req.ackMinimo() != null && req.ackMinimo() > 0) {
+            String csv = req.expansionRadiiMetros().stream()
+                    .map(String::valueOf).reduce((x, y) -> x + "," + y).orElse("");
+            a.setExpansionRadiiMetros(csv);
+            a.setExpansionWindowMinutes(req.expansionWindowMinutes() != null
+                    ? req.expansionWindowMinutes() : 5);
+            a.setLastExpansionAt(OffsetDateTime.now());
+        }
         alertaRepository.save(a);
         registerCooldown("TECHNICAL_REQUEST", u.getTenant().getId(), dedup, "SOLICITATION", a.getId());
 
@@ -357,7 +370,8 @@ public class AlertaService {
 
         Set<UUID> destinatarios = targetingService.targetPersonalized(
                 req.coordenadas(), req.raioMetros(), req.geofenceModes(),
-                req.targetRole(), tenantAlvo, tenantScope.baseVisibleTenantIds(u));
+                req.targetRole(), tenantAlvo, tenantScope.baseVisibleTenantIds(u),
+                req.lastHours(), req.frequentMinDays(), req.frequentLastDays());
         dispatcher.dispatch(a, destinatarios);
         return AlertaDTO.from(a, computeSummary(a.getId()));
     }
@@ -427,6 +441,7 @@ public class AlertaService {
         a.setStatus("RESOLVED");
         a.setDataResolvido(OffsetDateTime.now());
         a.setResolvedoPor(u);
+        pushService.pushStatusChange(a);
         return AlertaDTO.from(a, computeSummary(a.getId()));
     }
 
@@ -440,6 +455,7 @@ public class AlertaService {
         a.setStatus("CANCELLED");
         a.setDataResolvido(OffsetDateTime.now());
         a.setResolvedoPor(u);
+        pushService.pushStatusChange(a);
         return AlertaDTO.from(a, computeSummary(a.getId()));
     }
 

@@ -13,8 +13,10 @@ import br.com.iara.iara_api.repository.PontoApoioGeralRepository;
 import br.com.iara.iara_api.repository.ZonaRiscoRepository;
 import br.com.iara.iara_api.security.CurrentUser;
 import br.com.iara.iara_api.security.TenantScope;
+import br.com.iara.iara_api.service.alert.ZonaRiscoCriadaEvent;
 import br.com.iara.iara_api.util.geo.GeoUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +34,7 @@ public class ZonaRiscoService {
     private final PontoApoioGeralRepository apoioRepository;
     private final CurrentUser currentUser;
     private final TenantScope tenantScope;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public ZonaRiscoDTO criar(ZonaRiscoRequest req) {
@@ -47,6 +50,8 @@ public class ZonaRiscoService {
                 vincular(z, idApoio);
             }
         }
+        applicationEventPublisher.publishEvent(
+                new ZonaRiscoCriadaEvent(z.getId(), u.getTenant().getId(), u.getId()));
         return ZonaRiscoDTO.from(z);
     }
 

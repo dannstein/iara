@@ -106,6 +106,19 @@ public class Alerta {
     @Column(name = "merged_count", nullable = false)
     private int mergedCount = 0;
 
+    /** CSV de raios em metros: "5000,10000,20000". Null = sem expansão automática. */
+    @Column(name = "expansion_radii_metros", columnDefinition = "text")
+    private String expansionRadiiMetros;
+
+    @Column(name = "expansion_window_minutes")
+    private Integer expansionWindowMinutes;
+
+    @Column(name = "current_expansion_step", nullable = false)
+    private int currentExpansionStep = 0;
+
+    @Column(name = "last_expansion_at")
+    private OffsetDateTime lastExpansionAt;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

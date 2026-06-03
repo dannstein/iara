@@ -3,6 +3,8 @@ package br.com.iara.iara_api.controller;
 import br.com.iara.iara_api.dto.auth.TokenResponse;
 import br.com.iara.iara_api.dto.usuario.*;
 import br.com.iara.iara_api.dto.usuario.UsuariosEmRiscoDTO;
+import br.com.iara.iara_api.service.LocationHistoryService;
+import br.com.iara.iara_api.service.NotificacaoPrefService;
 import br.com.iara.iara_api.service.UsuarioService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,8 @@ import java.util.UUID;
 public class UsuarioController {
 
     private final UsuarioService service;
+    private final LocationHistoryService locationHistoryService;
+    private final NotificacaoPrefService notificacaoPrefService;
 
     // ----------------------------------------------------- cadastro (público)
 
@@ -137,5 +141,28 @@ public class UsuarioController {
     @PreAuthorize("hasRole('GESTOR')")
     public UsuariosEmRiscoDTO usuariosEmRisco() {
         return service.usuariosEmRisco();
+    }
+
+    // ----------------------------------------------------- histórico de localização (Fase 2C)
+
+    @PostMapping("/me/localizacao-historico")
+    public ResponseEntity<java.util.Map<String, Integer>> registrarLocalizacaoHistorico(
+            @Valid @RequestBody LocationHistoryBatchRequest req) {
+        int inseridos = locationHistoryService.registrarBatch(req);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(java.util.Map.of("inseridos", inseridos));
+    }
+
+    // ----------------------------------------------------- preferências de notificação (Fase 3A)
+
+    @GetMapping("/me/notificacao-prefs")
+    public NotificacaoPrefDTO notificacaoPrefsMe() {
+        return notificacaoPrefService.me();
+    }
+
+    @PutMapping("/me/notificacao-prefs")
+    public NotificacaoPrefDTO atualizarNotificacaoPrefsMe(
+            @Valid @RequestBody UpdateNotificacaoPrefRequest req) {
+        return notificacaoPrefService.atualizarMe(req);
     }
 }

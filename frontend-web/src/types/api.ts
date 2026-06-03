@@ -274,7 +274,7 @@ export type DeliveryStatus =
 
 export type AckResponse = 'ACCEPT' | 'REFUSE' | 'UNAVAILABLE';
 
-export type GeofenceMode = 'INSIDE' | 'NEAR' | 'HOME' | 'WORK';
+export type GeofenceMode = 'INSIDE' | 'NEAR' | 'HOME' | 'WORK' | 'PASSED_THROUGH' | 'FREQUENT';
 
 export interface AckSummaryDTO {
   sent: number;
@@ -318,6 +318,10 @@ export interface AlertaDTO {
   ackSummary: AckSummaryDTO | null;
   mergedCount: number;
   merged: boolean;
+  expansionRadiiMetros: number[];
+  expansionWindowMinutes: number | null;
+  currentExpansionStep: number;
+  lastExpansionAt: string | null;
   createdAt: string;
 }
 
@@ -413,6 +417,10 @@ export interface CreateDangerZoneAlertInput {
   dataExpiracao?: string;
   autoExpireMinutes?: number;
   requerAck?: boolean;
+  // Phase 2C — modos históricos
+  lastHours?: number;
+  frequentMinDays?: number;
+  frequentLastDays?: number;
 }
 
 export interface CreateEventZoneAlertInput {
@@ -426,6 +434,10 @@ export interface CreateEventZoneAlertInput {
   dataExpiracao?: string;
   autoExpireMinutes?: number;
   requerAck?: boolean;
+  // Phase 2C — modos históricos
+  lastHours?: number;
+  frequentMinDays?: number;
+  frequentLastDays?: number;
 }
 
 export interface CreateTenantBroadcastInput {
@@ -448,6 +460,9 @@ export interface CreateTechnicalRequestInput {
   ackMinimo?: number;
   dataExpiracao?: string;
   autoExpireMinutes?: number;
+  /** Phase 2B: passos de expansão de raio em metros (ex: [5000, 10000, 20000]). */
+  expansionRadiiMetros?: number[];
+  expansionWindowMinutes?: number;
 }
 
 export interface CreateSupportPointsInput {
@@ -498,6 +513,10 @@ export interface CreatePersonalizedInput {
   dataExpiracao?: string;
   autoExpireMinutes?: number;
   requerAck?: boolean;
+  // Phase 2C — modos históricos
+  lastHours?: number;
+  frequentMinDays?: number;
+  frequentLastDays?: number;
 }
 
 export interface EscalateAlertInput {
@@ -725,4 +744,55 @@ export interface UsuariosEmRiscoDTO {
   totalUsuariosEmRisco: number;
   zonas: ZonaComUsuariosDTO[];
   eventos: EventoComUsuariosDTO[];
+}
+
+// ----------------------------------------------------------------- Phase 2D
+// Alertas Automáticos (rule engine)
+
+export interface AlertaAutomaticoRuleParameter {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'enum';
+  label: string;
+  defaultValue: unknown;
+  options?: string[] | null;
+}
+
+export interface AlertaAutomaticoDTO {
+  ruleId: string;
+  displayName: string;
+  description: string;
+  triggerEvent: string;
+  parameters: AlertaAutomaticoRuleParameter[];
+  ativo: boolean;
+  config: Record<string, unknown> | null;
+  activatedBy: string | null;
+  activatedAt: string | null;
+  deactivatedAt: string | null;
+}
+
+export type AlertaAutomaticoAcao = 'ATIVADO' | 'DESATIVADO' | 'CONFIG_ALTERADO' | 'DISPAROU' | 'ERRO';
+
+export interface AlertaAutomaticoLogDTO {
+  id: string;
+  ruleId: string;
+  acao: AlertaAutomaticoAcao;
+  usuarioId: string | null;
+  alertaId: string | null;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+// ----------------------------------------------------------------- Phase 3A
+// Notification preferences
+
+export interface NotificacaoPrefDTO {
+  categoriasSilenciadas: string[];
+  severidadesSilenciadas: string[];
+  naoPerturbe: boolean;
+}
+
+export interface UpdateNotificacaoPrefInput {
+  categoriasSilenciadas?: string[];
+  severidadesSilenciadas?: string[];
+  naoPerturbe?: boolean;
 }

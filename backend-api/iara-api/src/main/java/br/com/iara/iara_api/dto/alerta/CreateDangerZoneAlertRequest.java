@@ -17,6 +17,10 @@ public record CreateDangerZoneAlertRequest(
         Integer raioMetros,
         OffsetDateTime dataExpiracao,
         Integer autoExpireMinutes,
-        boolean requerAck
+        boolean requerAck,
+        // Fase 2C — modos históricos de geofence
+        Integer lastHours,            // PASSED_THROUGH: olhar últimas N horas (default 24)
+        Integer frequentMinDays,      // FREQUENT: pelo menos N dias distintos com presença
+        Integer frequentLastDays      // FREQUENT: dentro dos últimos N dias (default 30)
 ) {
 }

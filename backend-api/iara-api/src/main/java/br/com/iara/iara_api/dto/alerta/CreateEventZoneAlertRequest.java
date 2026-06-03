@@ -17,6 +17,10 @@ public record CreateEventZoneAlertRequest(
         Integer raioMetros,
         OffsetDateTime dataExpiracao,
         Integer autoExpireMinutes,
-        boolean requerAck
+        boolean requerAck,
+        // Fase 2C — modos históricos de geofence
+        Integer lastHours,
+        Integer frequentMinDays,
+        Integer frequentLastDays
 ) {
 }
