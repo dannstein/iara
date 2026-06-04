@@ -45,9 +45,14 @@ public class AlertaRadiusExpansionJob {
     private final AlertaDispatcher dispatcher;
     private final PlatformTransactionManager txManager;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final br.com.iara.iara_api.service.AppConfigService appConfigService;
 
     @Scheduled(fixedDelayString = "PT1M", initialDelayString = "PT45S")
     public void runExpansion() {
+        if (appConfigService.isDisasterMode()) {
+            log.debug("[AlertaRadiusExpansionJob] disaster mode ativo — pulando tick");
+            return;
+        }
         List<Alerta> candidates = new TransactionTemplate(txManager).execute(s ->
                 alertaRepository.findExpansionCandidates());
         if (candidates == null || candidates.isEmpty()) return;

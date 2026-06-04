@@ -944,6 +944,182 @@ Sidebar ganhou item "Alertas Automáticos" no grupo Comunicação (ícone `Bot`)
 
 ---
 
+### 7.15 Preferências de Notificação (Fase 3A)
+
+Cada usuário pode silenciar categorias e severidades específicas, ou ativar "Modo não perturbe". O dispatcher filtra opt-outs antes de criar linhas em `iara_alerta_destinatario` — usuários silenciados nunca recebem o alerta e não contam para `totalDestinatarios`.
+
+**EMERGENCY sempre bypassa**: alertas com `severidade=EMERGENCY` ignoram qualquer opt-out por segurança vital.
+
+#### 7.15.1 Schema (V13)
+
+```sql
+CREATE TABLE iara_usuario_notificacao_pref (
+    id_usuario              UUID PRIMARY KEY REFERENCES iara_usuario(id) ON DELETE CASCADE,
+    categorias_silenciadas  TEXT,       -- CSV: "DANGER_ZONE,SUPPORT_POINTS"
+    severidades_silenciadas TEXT,       -- CSV: "INFO,WARNING"
+    nao_perturbe            BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Linha ausente = default (recebe tudo). Só persiste quando o usuário customiza.
+
+#### 7.15.2 Endpoints
+
+| Método | Caminho | Acesso | Resposta |
+|--------|---------|--------|----------|
+| GET | `/usuarios/me/notificacao-prefs` | qualquer auth | `NotificacaoPrefDTO` |
+| PUT | `/usuarios/me/notificacao-prefs` | qualquer auth | DTO atualizado |
+
+`NotificacaoPrefDTO = { categoriasSilenciadas: string[], severidadesSilenciadas: string[], naoPerturbe: boolean }`
+
+#### 7.15.3 Filtragem
+
+`NotificacaoPrefService.filtrarOptOuts(candidatos, categoria, severidade)`:
+1. Se `severidade=EMERGENCY` → retorna candidatos sem filtrar
+2. Carrega prefs de todos os IDs com `findByIdUsuarioIn`
+3. Para cada candidato: drop se `naoPerturbe`, ou se a categoria/severidade está silenciada
+
+Wired em `AlertaDispatcher.dispatch` e `AlertaDispatcher.dispatchAdditional` (expansão de raio também respeita).
+
+#### 7.15.4 UI
+
+Página `/perfil/notificacoes` acessível pelo menu do usuário (Topbar dropdown). Banner sempre visível explicando o bypass de EMERGENCY.
+
+---
+
+### 7.16 WebSocket Push (Fase 3B)
+
+STOMP sobre WebSocket em `/ws` para empurrar atualizações de alertas em tempo real, eliminando polling.
+
+#### 7.16.1 Stack
+
+- Backend: `spring-boot-starter-websocket` + simple broker in-memory.
+- Auth: JWT via header `Authorization: Bearer <token>` no frame CONNECT (validado por `ChannelInterceptor`).
+- Destinos:
+  - `/topic/tenant/{tenantId}/alertas` — broadcast para todos do tenant
+  - `/user/queue/alertas` — fila pessoal (Spring resolve via Principal)
+- Frontend: `@stomp/stompjs` + hook `useAlertasWebsocket` em `AppLayout` → invalida queries React Query no push.
+
+#### 7.16.2 Payload (compacto)
+
+```json
+// ALERT_NEW
+{ "type":"ALERT_NEW", "id":"<uuid>", "categoria":"DANGER_ZONE",
+  "severidade":"DANGER", "tenantId":"<uuid>" }
+
+// ALERT_STATUS_CHANGED (resolved/cancelled/expired)
+{ "type":"ALERT_STATUS_CHANGED", "id":"<uuid>", "status":"RESOLVED",
+  "tenantId":"<uuid>" }
+```
+
+O payload propositalmente é mínimo — o cliente invalida a query e refaz o GET autenticado para o detalhe.
+
+#### 7.16.3 Publishers
+
+- `AlertaPushService.pushNew(alerta, ids)` chamado de `AlertaDispatcher` no afterCommit
+- `AlertaPushService.pushStatusChange(alerta)` chamado em `AlertaService.resolver/cancelar`
+
+#### 7.16.4 Reconnect + segurança
+
+`@stomp/stompjs` faz reconnect automático com backoff (5s). A página `/login` desconecta via `disconnect()` quando o usuário sai. O endpoint `/ws/**` é permitido pelo Spring Security (auth real acontece no CONNECT frame).
+
+---
+
+### 7.17 Multi-channel + Disaster Mode (Fase 3C)
+
+#### 7.17.1 Schema (V14)
+
+```sql
+CREATE TABLE iara_notificacao_envio (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id_alerta   UUID NOT NULL REFERENCES iara_alerta(id) ON DELETE CASCADE,
+    id_usuario  UUID NOT NULL REFERENCES iara_usuario(id) ON DELETE CASCADE,
+    canal       VARCHAR(20) NOT NULL,           -- LOG | EMAIL | SMS | WHATSAPP | PUSH
+    status      VARCHAR(20) NOT NULL,           -- ENVIADO | FALHOU | IGNORADO
+    erro        TEXT,
+    sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE iara_app_config (
+    chave       VARCHAR(80) PRIMARY KEY,
+    valor       TEXT,
+    descricao   TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by  UUID REFERENCES iara_usuario(id)
+);
+-- Seed: DISASTER_MODE_ATIVO=false, CANAIS_HABILITADOS=LOG
+```
+
+#### 7.17.2 Interface `INotificationChannel`
+
+```java
+public interface INotificationChannel {
+    String id();                          // "LOG", "EMAIL", "SMS", "WHATSAPP", "PUSH"
+    boolean isHealthy();                  // credenciais configuradas?
+    NotificationResult send(Alerta a, Usuario u);  // ENVIADO|FALHOU|IGNORADO
+}
+```
+
+Cada canal é um `@Component`. O `NotificationChannelDispatcher` descobre via lista injetada, indexa por `id()`. Atualmente registrados: `LOG` (funcional), `EMAIL` e `SMS` (stubs — retornam IGNORADO até SMTP/Twilio serem configurados).
+
+#### 7.17.3 Dispatch flow
+
+`AlertaDispatcher.dispatch`:
+1. Filtra opt-outs (Fase 3A)
+2. Persiste `iara_alerta_destinatario` rows
+3. **Chama `channelDispatcher.dispatch()` na MESMA transação** (não em afterCommit — semântica de commit confiável)
+4. AfterCommit: publica RabbitMQ + push WebSocket
+
+O dispatcher itera por `appConfig.canaisHabilitados()` × destinatários, captura `NotificationResult`, persiste em `iara_notificacao_envio`. Falhas individuais não interrompem o batch.
+
+#### 7.17.4 AppConfigService — chaves conhecidas
+
+| Chave | Default | Significado |
+|-------|---------|-------------|
+| `DISASTER_MODE_ATIVO` | `false` | Quando `true`: jobs e regras automáticas pausam |
+| `CANAIS_HABILITADOS` | `LOG` | CSV de canais ativos para fan-out |
+
+Cache em memória com TTL de 30s para evitar hot path no banco (jobs consultam a cada tick). `set()` invalida o cache imediatamente.
+
+#### 7.17.5 Endpoints
+
+| Método | Caminho | Acesso | Body | Resposta |
+|--------|---------|--------|------|----------|
+| GET | `/admin/app-config` | qualquer auth | — | `{ disasterModeAtivo, canaisHabilitados, canaisDisponiveis: [{id,healthy}], outros }` |
+| PUT | `/admin/app-config` | ADMIN | `{ disasterModeAtivo?, canaisHabilitados? }` | DTO atualizado |
+
+GET é livre para todos para que o banner de disaster mode apareça para qualquer usuário logado.
+
+#### 7.17.6 Disaster mode — comportamento
+
+Quando `DISASTER_MODE_ATIVO=true`:
+- `AlertaSchedulerJob` (agendamentos) pula o tick com log debug
+- `AlertaRadiusExpansionJob` (expansão de raio) pula o tick
+- `AlertaAutomaticoListener` (regras automáticas) sai do dispatch sem processar
+- **Alertas manuais continuam funcionando** — não é freeze total, é throttle de automações
+- UI mostra banner persistente abaixo do Topbar (vermelho, com explicação)
+
+#### 7.17.7 UI
+
+Rota `/admin/app-config` (apenas role ADMIN). Mostra:
+- Toggle do modo desastre + descrição do efeito
+- Lista de canais com checkbox + indicador `healthy/sem configuração`
+- Snapshot de outras chaves de config (se houver)
+
+`DisasterModeBanner` aparece em todas as páginas (`AppLayout`) quando o modo está ativo.
+
+#### 7.17.8 Adicionar um novo canal
+
+1. Criar `@Component` em `service/channel/` implementando `INotificationChannel`
+2. `id()` retorna identificador estável (CAIXA ALTA)
+3. `isHealthy()` valida configuração externa (credenciais, conectividade)
+4. `send()` retorna `NotificationResult.ok()` / `failed(erro)` / `ignored(motivo)`
+5. ADMIN ativa via PUT `/admin/app-config` com o novo id no `canaisHabilitados`
+6. O canal aparece automaticamente em `canaisDisponiveis` do GET
+
+---
+
 ## 8. Pontos de Coleta (PC)
 
 | Método | Caminho | Acesso | Body | Resposta |

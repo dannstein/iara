@@ -8,6 +8,7 @@ import br.com.iara.iara_api.repository.AlertaDestinatarioRepository;
 import br.com.iara.iara_api.repository.AlertaRepository;
 import br.com.iara.iara_api.repository.UsuarioRepository;
 import br.com.iara.iara_api.service.NotificacaoPrefService;
+import br.com.iara.iara_api.service.channel.NotificationChannelDispatcher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class AlertaDispatcher {
     private final NotificationPublisher publisher;
     private final NotificacaoPrefService notificacaoPrefService;
     private final AlertaPushService pushService;
+    private final NotificationChannelDispatcher channelDispatcher;
 
     @Transactional
     public int dispatch(Alerta alerta, Set<UUID> destinatarios) {
@@ -76,6 +78,13 @@ public class AlertaDispatcher {
         final List<UUID> finalIds = List.copyOf(validIds);
 
         final Alerta finalAlerta = alerta;
+        final java.util.Set<UUID> destinatariosSet = java.util.Set.copyOf(validIds);
+
+        // Fan-out por canal roda na MESMA transação do alerta — garante commit
+        // determinístico das linhas em iara_notificacao_envio (chamar @Transactional
+        // de dentro de um afterCommit handler tem semântica de commit pouco confiável).
+        channelDispatcher.dispatch(finalAlerta, destinatariosSet);
+
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

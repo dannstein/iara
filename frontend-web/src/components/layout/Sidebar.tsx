@@ -14,21 +14,25 @@ import {
   Siren,
   Clock,
   Bot,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEventos } from '@/hooks/useEventos';
 import { useAlertasDashboard } from '@/hooks/useAlertas';
+import { useAuthStore } from '@/store/authStore';
 
 interface NavEntry {
   href: string;
   icon: LucideIcon;
   label: string;
+  adminOnly?: boolean;
 }
 
 interface NavGroup {
   eyebrow: string;
   items: NavEntry[];
+  adminOnly?: boolean;
 }
 
 const groups: NavGroup[] = [
@@ -64,6 +68,13 @@ const groups: NavGroup[] = [
       { href: '/usuarios', icon: Users, label: 'Usuários' },
       { href: '/zonas-risco', icon: ShieldAlert, label: 'Zonas de Risco' },
       { href: '/tenants', icon: Building2, label: 'Tenants' },
+    ],
+  },
+  {
+    eyebrow: 'Administração',
+    adminOnly: true,
+    items: [
+      { href: '/admin/app-config', icon: Settings, label: 'Configuração global', adminOnly: true },
     ],
   },
 ];
@@ -115,6 +126,10 @@ function NavItem({ href, icon: Icon, label, badge, badgeVariant }: NavItemProps)
 }
 
 export function Sidebar() {
+  const role = useAuthStore((s) => s.user?.role);
+  const isAdmin = role === 'ADMIN';
+  const visibleGroups = groups.filter((g) => !g.adminOnly || isAdmin);
+
   // contagem de eventos que aguardam aprovação (badge no item Eventos)
   const { data: pendentes } = useEventos({ status: 'SOLICITADO' });
   const pendentesCount = pendentes?.length ?? 0;
@@ -132,7 +147,7 @@ export function Sidebar() {
   return (
     <aside className="fixed bottom-0 left-0 top-14 z-40 flex w-60 flex-col border-r border-white/5 bg-gradient-to-b from-bg-primary to-bg-app transition-all duration-200">
       <div className="flex-1 overflow-y-auto pb-2">
-        {groups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.eyebrow}>
             <div className="px-3 pb-2 pt-5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
               {group.eyebrow}

@@ -28,6 +28,7 @@ public class AlertaAutomaticoListener {
     private final AlertaAutomaticoRegistry registry;
     private final AlertaAutomaticoRepository activationRepo;
     private final AlertaAutomaticoLogService logService;
+    private final br.com.iara.iara_api.service.AppConfigService appConfigService;
 
     /**
      * Roda síncrono na mesma transação do publisher. Isso significa que a regra
@@ -51,6 +52,10 @@ public class AlertaAutomaticoListener {
     }
 
     private void dispatch(Class<?> eventClass, Object event, UUID tenantId) {
+        if (appConfigService.isDisasterMode()) {
+            log.debug("[AlertaAutomaticoListener] disaster mode ativo — pulando {}", eventClass.getSimpleName());
+            return;
+        }
         List<IAlertaAutomaticoRule> applicable = registry.byTriggerClass(eventClass);
         if (applicable.isEmpty()) return;
 
