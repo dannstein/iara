@@ -38,12 +38,17 @@ public class AlertaSchedulerJob {
     private final AlertaAgendadoRepository repository;
     private final AlertaService alertaService;
     private final PlatformTransactionManager txManager;
+    private final br.com.iara.iara_api.service.AppConfigService appConfigService;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule());
 
     @Scheduled(fixedDelayString = "PT30S", initialDelayString = "PT15S")
     public void runScheduler() {
+        if (appConfigService.isDisasterMode()) {
+            log.debug("[AlertaSchedulerJob] disaster mode ativo — pulando tick");
+            return;
+        }
         OffsetDateTime now = OffsetDateTime.now();
         List<AlertaAgendado> due = new TransactionTemplate(txManager).execute(s ->
                 repository.findDueForExecution(now));

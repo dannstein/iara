@@ -796,3 +796,23 @@ export interface UpdateNotificacaoPrefInput {
   severidadesSilenciadas?: string[];
   naoPerturbe?: boolean;
 }
+
+// ----------------------------------------------------------------- Phase 3C
+// App config + multi-channel + disaster mode
+
+export interface AppConfigChannelStatus {
+  id: string;
+  healthy: boolean;
+}
+
+export interface AppConfigDTO {
+  disasterModeAtivo: boolean;
+  canaisHabilitados: string[];
+  canaisDisponiveis: AppConfigChannelStatus[];
+  outros: Record<string, string>;
+}
+
+export interface UpdateAppConfigInput {
+  disasterModeAtivo?: boolean;
+  canaisHabilitados?: string[];
+}

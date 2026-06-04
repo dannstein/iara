@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
+import { DisasterModeBanner } from './DisasterModeBanner';
 import { useAlertasWebsocket } from '@/hooks/useAlertasWebsocket';
 
 export function AppLayout() {
@@ -14,6 +15,7 @@ export function AppLayout() {
       <Topbar />
       <Sidebar />
       <main className="ml-60 pt-14">
+        <DisasterModeBanner />
         {isFullBleed ? (
           <div className="h-[calc(100vh-56px)]">
             <Outlet />
