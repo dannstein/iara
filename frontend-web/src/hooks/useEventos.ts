@@ -7,6 +7,7 @@ import type {
   IncidentesDTO,
   Severidade,
   TriagemDTO,
+  RegistrarTriagemInput,
   FideDTO,
   DemandaDTO,
   CheckinDTO,
@@ -64,6 +65,20 @@ export function useEventoTriagem(id: string | undefined) {
     queryKey: ['evento', id, 'triagem'],
     queryFn: () => api.get<TriagemDTO[]>(`/eventos/${id}/triagem`).then((r) => r.data),
     enabled: !!id,
+  });
+}
+
+export function useRegistrarTriagem(eventoId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RegistrarTriagemInput) =>
+      api
+        .post<TriagemDTO>(`/eventos/${eventoId}/triagem`, input)
+        .then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['evento', eventoId, 'triagem'] });
+      qc.invalidateQueries({ queryKey: ['evento', eventoId, 'incidentes'] });
+    },
   });
 }
 

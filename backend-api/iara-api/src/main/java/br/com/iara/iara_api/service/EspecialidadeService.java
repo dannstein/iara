@@ -26,10 +26,21 @@ public class EspecialidadeService {
 
     @Transactional(readOnly = true)
     public List<CategoriaDTO> listarCategorias() {
-        UUID tenantId = currentUser.tenantId();
+        // Endpoint público (usado na tela de cadastro mobile, sem auth).
+        // Sem usuário logado retornamos apenas categorias globais.
+        UUID tenantId = optionalTenantId();
         return categoriaRepository.findGlobaisOuDoTenant(tenantId).stream()
                 .map(c -> CategoriaDTO.from(c, null))
                 .toList();
+    }
+
+    /** Retorna o tenant do usuário logado ou {@code null} para chamadas anônimas. */
+    private UUID optionalTenantId() {
+        try {
+            return currentUser.tenantId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -53,7 +64,8 @@ public class EspecialidadeService {
 
     @Transactional(readOnly = true)
     public List<EspecDTO> listarEspecs(UUID idCategoria) {
-        UUID tenantId = currentUser.tenantId();
+        // Endpoint público (idem listarCategorias).
+        UUID tenantId = optionalTenantId();
         return especRepository.findGlobaisOuDoTenant(tenantId, idCategoria).stream()
                 .map(EspecDTO::from).toList();
     }

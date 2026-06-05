@@ -132,7 +132,7 @@ Cadastro 🔓 (público). Os de aprovação automática (doador/simples/coordena
 | POST | `/usuarios/cadastro/doador` | 🔓 | `{ "nome","email","telefone","documento","senha","tenantId" }` | TokenResponse 201 |
 | POST | `/usuarios/cadastro/simples` | 🔓 | idem | TokenResponse 201 |
 | POST | `/usuarios/cadastro/coordenador` | 🔓 | idem | TokenResponse 201 |
-| POST | `/usuarios/cadastro/tecnico` | 🔓 | **multipart**: `nome, email, telefone, documento, senha, tenantId, idEspec, docComprovacaoNumero, doc_comprovacao (arquivo)` | UsuarioDTO 202. RN24: faltando idEspec/docComprovacaoNumero/arquivo → 422 |
+| POST | `/usuarios/cadastro/tecnico` | 🔓 | **multipart**: `nome, email, telefone, documento, senha, tenantId, idEspec, docComprovacaoNumero, doc_comprovacao (arquivo — opcional, ver §3.1)` | UsuarioDTO 202 com `cadastroSts=PENDENTE`. RN24: idEspec ou docComprovacaoNumero ausente → 422 |
 | GET | `/usuarios/me` | 👤 | — | UsuarioDTO |
 | PUT | `/usuarios/me` | 👤 | `{ "nome?","telefone?","fotoUrl?","localizacao?":{lat,lng}, "endereco?":{cep,logradouro,numero,complemento,bairro,cidade,uf,coordenadas:{lat,lng}} }` | UsuarioDTO |
 | PATCH | `/usuarios/me/disponibilidade?disponivel=true` | TECNICO | query `disponivel` opcional (omitido = alterna) | UsuarioDTO |
@@ -154,16 +154,29 @@ Cadastro 🔓 (público). Os de aprovação automática (doador/simples/coordena
 **EventoComUsuariosDTO:** `{ eventoId, eventoTitulo, severidade, status, raioMetros, coordenadas:{lat,lng}, totalUsuarios, usuarios:[UsuarioLocalizacaoDTO] }`
 **UsuarioLocalizacaoDTO:** `{ id, nome, role, telefone, localizacao:{lat,lng} }` — somente exposto para usuários dentro de área de risco ativa (LGPD Art. 7 VII — interesses vitais)
 
+### 3.1 Cadastro de TECNICO — sem upload de arquivo
+
+Storage de arquivos ainda não está configurado, então o `doc_comprovacao` (arquivo) é **opcional** no endpoint multipart. O cliente envia apenas:
+
+- `idEspec` (UUID) — uma das especialidades retornadas por `GET /especialidades` (público, ver §4)
+- `docComprovacaoNumero` (string) — número de registro profissional (CRM, COREN, CREA, etc.)
+
+A regra de negócio (RN24) é validada no `UsuarioService.cadastrarTecnico`. A constraint de banco `chk_tecnico_comprovacao` foi relaxada em V15 para permitir `doc_comprovacao_url IS NULL` enquanto `(id_espec, doc_comprovacao_numero)` permanecem consistentes (ambos NOT NULL).
+
+O cadastro fica em `cadastroSts=PENDENTE`; gestor aprova via `PATCH /usuarios/{id}/aprovar` na tela de Voluntários, vendo o número de comprovação para verificação offline.
+
+**Mobile**: o app deve buscar a lista real de especialidades em `GET /especialidades` (público, sem auth) — `frontend-mobile/iara-app/app/signup-voluntario.tsx` foi atualizado para isso. A lista mock anterior tinha UUIDs sintéticos que não existiam no banco, causando 404 "Especialidade não encontrada".
+
 ---
 
 ## 4. Especialidades
 
 | Método | Caminho | Acesso | Body | Resposta |
 |--------|---------|--------|------|----------|
-| GET | `/especialidades/categorias` | 👤 | — | CategoriaDTO[] (sem subcategorias) |
-| GET | `/especialidades/categorias/{id}` | 👤 | — | CategoriaDTO (com `subcategorias[]`) |
+| GET | `/especialidades/categorias` | 🔓 | — | CategoriaDTO[] (sem subcategorias). Anônimo recebe apenas globais |
+| GET | `/especialidades/categorias/{id}` | 🔓 | — | CategoriaDTO (com `subcategorias[]`) |
 | POST | `/especialidades/categorias` | GESTOR | `{ "nome","descricao?" }` | CategoriaDTO 201 |
-| GET | `/especialidades?id_categoria=` | 👤 | filtro opcional | EspecDTO[] |
+| GET | `/especialidades?id_categoria=` | 🔓 | filtro opcional | EspecDTO[]. Anônimo recebe apenas globais (idTenant null) |
 | POST | `/especialidades` | GESTOR | `{ "idCategoria","nome","descricao?" }` | EspecDTO 201 |
 
 **CategoriaDTO:** `{ id, nome, descricao, idTenant, subcategorias:[EspecDTO]|null }`
@@ -249,11 +262,13 @@ Cadastro 🔓 (público). Os de aprovação automática (doador/simples/coordena
 ### 6.6 Triagem START — RN13/RN14
 | Método | Caminho | Acesso | Body | Resposta |
 |--------|---------|--------|------|----------|
-| POST | `/eventos/{id}/triagem` | TECNICO | `{ "codigoCampo","nomeProvisorio?","idadeEstimada?","classificacao","respiraAposAbertura?","coordenadas?":{lat,lng},"idSetor?","dataSincronizacao?" }` | TriagemDTO 201. RN14: respiraAposAbertura=false e classificacao≠PRETO → 422 |
+| POST | `/eventos/{id}/triagem` | TECNICO, MONITOR, GESTOR, ADMIN | `{ "codigoCampo","nomeProvisorio?","idadeEstimada?","classificacao","respiraAposAbertura?","coordenadas?":{lat,lng},"idSetor?","dataSincronizacao?" }` | TriagemDTO 201. RN14: respiraAposAbertura=false e classificacao≠PRETO → 422 |
 | GET | `/eventos/{id}/triagem` | MONITOR | — | TriagemDTO[] (estado atual por código) |
 | GET | `/eventos/{id}/triagem/{codigoCampo}` | MONITOR | — | TriagemDTO[] (histórico de reavaliações) |
 
 **TriagemDTO:** `{ id, codigoCampo, nomeProvisorio, idadeEstimada, classificacao, respiraAposAbertura, localEncontrado:{lat,lng}, setorId, triadorId, createdAt }`
+
+**UI**: `EventoDetailPage` aba "Incidentes / START" mostra botão "Registrar triagem" para roles TECNICO/MONITOR/GESTOR/ADMIN. O modal `RegistrarTriagemModal` (em `frontend-web/src/pages/Eventos/RegistrarTriagemModal.tsx`) usa botões coloridos para classificação, força PRETO quando `respiraAposAbertura=false` (RN14 client-side antes do server enforcement), e oferece "Usar minha localização" para preencher coordenadas via `navigator.geolocation`. Mobile mantém a vista read-only existente.
 
 ### 6.7 Setores (RN19)
 | Método | Caminho | Acesso | Body | Resposta |
@@ -948,7 +963,7 @@ Sidebar ganhou item "Alertas Automáticos" no grupo Comunicação (ícone `Bot`)
 
 Cada usuário pode silenciar categorias e severidades específicas, ou ativar "Modo não perturbe". O dispatcher filtra opt-outs antes de criar linhas em `iara_alerta_destinatario` — usuários silenciados nunca recebem o alerta e não contam para `totalDestinatarios`.
 
-**EMERGENCY sempre bypassa**: alertas com `severidade=EMERGENCY` ignoram qualquer opt-out por segurança vital.
+**EMERGENCY e CRITICAL sempre bypassam**: alertas com essas severidades ignoram qualquer opt-out por segurança vital. O check fica em `NotificacaoPrefService.filtrarOptOuts` na primeira linha do método.
 
 #### 7.15.1 Schema (V13)
 
@@ -1117,6 +1132,29 @@ Rota `/admin/app-config` (apenas role ADMIN). Mostra:
 4. `send()` retorna `NotificationResult.ok()` / `failed(erro)` / `ignored(motivo)`
 5. ADMIN ativa via PUT `/admin/app-config` com o novo id no `canaisHabilitados`
 6. O canal aparece automaticamente em `canaisDisponiveis` do GET
+
+---
+
+### 7.18 Notificação automática a gestores em evento SOLICITADO
+
+Quando `EventoService.criar()` registra um novo evento (status inicial `SOLICITADO`), dispara automaticamente um TENANT_BROADCAST direcionado apenas aos GESTORes do tenant do solicitante, avisando que há uma nova solicitação aguardando aprovação.
+
+**Sempre-ativo, fora do rules engine** — espelha o padrão de `notificarTecnicos()` e `pcNotificacaoService.notificarPcsProximos()` já chamados em `EventoService.aprovar()`. A escolha foi pragmática: o comportamento é exigência de negócio (gestores precisam ver toda nova solicitação) e tornar opt-in via `iara_alerta_automatico` adicionaria fricção sem ganho.
+
+**Payload do alerta**:
+- `categoria=TENANT_BROADCAST`
+- `severidade=WARNING`
+- `targetRole=GESTOR`
+- `titulo="Novo evento aguardando aprovação"`
+- `mensagem="<nome do solicitante> solicitou "<título>" (severidade <X>). Acesse a Central de Eventos para aprovar ou cancelar."`
+
+**Targeting** reutiliza `aprovadosPorTenantsERole(tenantId, "GESTOR")` — apenas gestores `cadastroSts=APROVADO` recebem.
+
+**Cooldown** usa o mesmo mecanismo Redis de `criarTenantBroadcast` — múltiplas solicitações idênticas em janela curta mergeiam (raro na prática, dado que cada evento tem título único).
+
+**Resiliência**: a chamada é envolvida em `try/catch` silencioso — falha de notificação NÃO impede a criação do evento. O evento é o estado primário; o alerta é acessório.
+
+**Verificação**: `count(*)` em `iara_alerta WHERE categoria='TENANT_BROADCAST' AND target_role='GESTOR'` antes e depois de `POST /eventos` deve incrementar em 1 (ou seguir mergeado em caso de duplicata em cooldown).
 
 ---
 

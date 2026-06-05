@@ -48,6 +48,11 @@ public class SecurityConfig {
                                 "/usuarios/cadastro/**",
                                 "/ws/**"
                         ).permitAll()
+                        // /especialidades GET é referência pública (lista de catálogo
+                        // usada na tela de cadastro de TECNICO antes do login).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/especialidades/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

@@ -46,6 +46,7 @@ import {
 } from '@/hooks/useEventos';
 import { useUsuario, useUsuariosByIds } from '@/hooks/useUsuarios';
 import { NovaDemandaModal } from './NovaDemandaModal';
+import { RegistrarTriagemModal } from './RegistrarTriagemModal';
 import { useAuthStore, hasRole } from '@/store/authStore';
 import { apiErrorMessage } from '@/lib/api';
 import { formatAbsolute, formatRelative, prioridadeConfig, distanceMeters } from '@/lib/utils';
@@ -372,6 +373,11 @@ function IncidentesTab({ eventoId, canManage }: { eventoId: string; canManage: b
   const historico = useEventoIncidentes(eventoId);
   const triagem = useEventoTriagem(eventoId);
   const [registrarOpen, setRegistrarOpen] = useState(false);
+  const [triagemOpen, setTriagemOpen] = useState(false);
+
+  const role = useAuthStore((s) => s.user?.role);
+  // TECNICO, MONITOR, GESTOR e ADMIN podem registrar triagem em campo.
+  const canTriage = role === 'TECNICO' || hasRole(role, 'MONITOR');
 
   const inc = atual.data;
 
@@ -419,7 +425,14 @@ function IncidentesTab({ eventoId, canManage }: { eventoId: string; canManage: b
 
       {/* Vítimas triadas individualmente */}
       <div>
-        <SectionHeader eyebrow="Protocolo START" title="Vítimas triadas" barColor="#EF4444" />
+        <div className="flex items-center justify-between">
+          <SectionHeader eyebrow="Protocolo START" title="Vítimas triadas" barColor="#EF4444" />
+          {canTriage && (
+            <Button onClick={() => setTriagemOpen(true)}>
+              <Plus size={15} /> Registrar triagem
+            </Button>
+          )}
+        </div>
         {triagem.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : (triagem.data?.length ?? 0) === 0 ? (
@@ -492,6 +505,12 @@ function IncidentesTab({ eventoId, canManage }: { eventoId: string; canManage: b
         atual={inc}
         open={registrarOpen}
         onClose={() => setRegistrarOpen(false)}
+      />
+
+      <RegistrarTriagemModal
+        eventoId={eventoId}
+        open={triagemOpen}
+        onClose={() => setTriagemOpen(false)}
       />
     </div>
   );
