@@ -1,6 +1,7 @@
 package br.com.iara.iara_api.service;
 
 import br.com.iara.iara_api.domain.*;
+import br.com.iara.iara_api.dto.alerta.CreateTenantBroadcastRequest;
 import br.com.iara.iara_api.dto.evento.*;
 import br.com.iara.iara_api.exception.BusinessException;
 import br.com.iara.iara_api.exception.ConflictException;
@@ -43,6 +44,7 @@ public class EventoService {
     private final NotificationPublisher notificationPublisher;
     private final PcNotificacaoService pcNotificacaoService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final AlertaService alertaService;
 
     // ----------------------------------------------------------- CRUD / ciclo
 
@@ -75,7 +77,36 @@ public class EventoService {
         eventoRepository.save(e);
 
         registrarHistorico(e, null, "SOLICITADO", u, "Evento criado");
+        notificarGestoresSolicitacao(e);
         return EventoDTO.from(e, 0);
+    }
+
+    /**
+     * Dispara um TENANT_BROADCAST direcionado apenas aos GESTORes do tenant
+     * dono do evento, avisando que há uma nova solicitação aguardando
+     * aprovação. Sempre-ativo (não passa pelo rules engine).
+     */
+    private void notificarGestoresSolicitacao(Evento e) {
+        try {
+            String solicitanteNome = e.getSolicitante() != null
+                    ? e.getSolicitante().getNome() : "Usuário";
+            String titulo = "Novo evento aguardando aprovação";
+            String mensagem = String.format(
+                    "%s solicitou \"%s\" (severidade %s). Acesse a Central de Eventos para aprovar ou cancelar.",
+                    solicitanteNome, e.getTitulo(), e.getSeveridade());
+            CreateTenantBroadcastRequest req = new CreateTenantBroadcastRequest(
+                    e.getTenant().getId(),
+                    "GESTOR",
+                    "WARNING",
+                    titulo,
+                    mensagem,
+                    null,
+                    null
+            );
+            alertaService.criarTenantBroadcast(req);
+        } catch (Exception ex) {
+            // Notificação acessória — falhas não devem impedir a criação do evento.
+        }
     }
 
     @Transactional(readOnly = true)

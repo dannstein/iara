@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { 
+import React, { useEffect, useState } from 'react';
+import {
     View,
     Text,
     StyleSheet,
@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     Modal,
     FlatList,
+    ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Input } from "@/components/Input";
@@ -19,23 +20,11 @@ import * as DocumentPicker from 'expo-document-picker';
 import { api } from '../services/api';
 import { useAppModal } from '../components/AppModal';
 
-const ESPECIALIDADES_MOCK = [
-    { id: '10000000-0000-0000-0000-000000000101', nome: 'Médico Clínico Geral' },
-    { id: '10000000-0000-0000-0000-000000000102', nome: 'Médico Pediatra' },
-    { id: '10000000-0000-0000-0000-000000000103', nome: 'Médico de Emergência' },
-    { id: '10000000-0000-0000-0000-000000000104', nome: 'Enfermeiro' },
-    { id: '10000000-0000-0000-0000-000000000105', nome: 'Técnico de Enfermagem' },
-    { id: '10000000-0000-0000-0000-000000000106', nome: 'Farmacêutico' },
-    { id: '10000000-0000-0000-0000-000000000107', nome: 'Psicólogo' },
-    { id: '10000000-0000-0000-0000-000000000108', nome: 'Assistente Social' },
-    { id: '10000000-0000-0000-0000-000000000109', nome: 'Engenheiro Civil' },
-    { id: '10000000-0000-0000-0000-000000000110', nome: 'Geólogo' },
-    { id: '10000000-0000-0000-0000-000000000111', nome: 'Bombeiro Civil' },
-    { id: '10000000-0000-0000-0000-000000000112', nome: 'Socorrista' },
-    { id: '10000000-0000-0000-0000-000000000113', nome: 'Motorista' },
-    { id: '10000000-0000-0000-0000-000000000114', nome: 'Operador de Barco' },
-    { id: '10000000-0000-0000-0000-000000000115', nome: 'Logístico' },
-];
+// Backend EspecDTO: { id, idCategoria, nome, descricao, idTenant }
+interface EspecOption {
+    id: string;
+    nome: string;
+}
 
 export default function SignupVoluntario() {
     const { show, modal } = useAppModal();
@@ -45,9 +34,38 @@ export default function SignupVoluntario() {
     const [documento, setDocumento] = useState(""); // CPF
     const [senha, setSenha] = useState("");
     const [registro, setRegistro] = useState(""); // docComprovacaoNumero
-    const [especialidade, setEspecialidade] = useState<{ id: string; nome: string } | null>(null);
+    const [especialidade, setEspecialidade] = useState<EspecOption | null>(null);
     const [comprovante, setComprovante] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
     const [modalVisible, setModalVisible] = useState(false);
+    const [especialidades, setEspecialidades] = useState<EspecOption[]>([]);
+    const [especsLoading, setEspecsLoading] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function fetchEspecs() {
+            try {
+                const r = await api.get<{ id: string; nome: string }[]>('/especialidades');
+                if (!cancelled) {
+                    setEspecialidades(
+                        [...r.data].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+                    );
+                }
+            } catch (err) {
+                console.error("Erro ao carregar especialidades:", err);
+                if (!cancelled) {
+                    show({
+                        type: 'error',
+                        title: 'Erro de conexão',
+                        message: 'Não foi possível carregar a lista de especialidades. Verifique sua conexão.',
+                    });
+                }
+            } finally {
+                if (!cancelled) setEspecsLoading(false);
+            }
+        }
+        fetchEspecs();
+        return () => { cancelled = true; };
+    }, []);
 
     async function handlePickDocument() {
         try {
@@ -152,14 +170,22 @@ export default function SignupVoluntario() {
                         />
 
                         {/* Seletor de Especialidade */}
-                        <TouchableOpacity 
-                            style={styles.pickerButton} 
-                            onPress={() => setModalVisible(true)}
+                        <TouchableOpacity
+                            style={styles.pickerButton}
+                            onPress={() => !especsLoading && setModalVisible(true)}
                             activeOpacity={0.7}
+                            disabled={especsLoading}
                         >
-                            <Text style={especialidade ? styles.pickerButtonTextActive : styles.pickerButtonText}>
-                                {especialidade ? `Especialidade: ${especialidade.nome}` : "Selecionar Especialidade Técnica"}
-                            </Text>
+                            {especsLoading ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <ActivityIndicator size="small" color={Colors.blue.dark} />
+                                    <Text style={styles.pickerButtonText}>Carregando especialidades...</Text>
+                                </View>
+                            ) : (
+                                <Text style={especialidade ? styles.pickerButtonTextActive : styles.pickerButtonText}>
+                                    {especialidade ? `Especialidade: ${especialidade.nome}` : "Selecionar Especialidade Técnica"}
+                                </Text>
+                            )}
                         </TouchableOpacity>
 
                         <Input 
@@ -227,7 +253,7 @@ export default function SignupVoluntario() {
                         </View>
                         
                         <FlatList
-                            data={ESPECIALIDADES_MOCK}
+                            data={especialidades}
                             keyExtractor={(item) => item.id}
                             renderItem={({ item }) => (
                                 <TouchableOpacity 

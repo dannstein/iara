@@ -61,8 +61,8 @@ public class NotificacaoPrefService {
     @Transactional(readOnly = true)
     public Set<UUID> filtrarOptOuts(Set<UUID> candidatos, String categoria, String severidade) {
         if (candidatos.isEmpty()) return candidatos;
-        // EMERGENCY sempre passa: emergências reais não respeitam preferências.
-        if ("EMERGENCY".equals(severidade)) return candidatos;
+        // EMERGENCY e CRITICAL sempre passam: severidades críticas não respeitam preferências.
+        if ("EMERGENCY".equals(severidade) || "CRITICAL".equals(severidade)) return candidatos;
 
         List<UsuarioNotificacaoPref> prefs = repo.findByIdUsuarioIn(List.copyOf(candidatos));
         Map<UUID, UsuarioNotificacaoPref> byId = prefs.stream()

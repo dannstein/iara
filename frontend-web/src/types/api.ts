@@ -124,6 +124,17 @@ export interface TriagemDTO {
   createdAt: string;
 }
 
+export interface RegistrarTriagemInput {
+  codigoCampo: string;
+  nomeProvisorio?: string;
+  idadeEstimada?: number;
+  classificacao: Classificacao;
+  respiraAposAbertura?: boolean;
+  coordenadas?: Coordenadas;
+  idSetor?: string;
+  dataSincronizacao?: string;
+}
+
 export interface HistoricoDTO {
   id: string;
   statusDe: EventoStatus | null;

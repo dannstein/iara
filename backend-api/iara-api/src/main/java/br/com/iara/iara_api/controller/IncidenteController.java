@@ -45,7 +45,7 @@ public class IncidenteController {
     // ---- 8.2 triagem START individual ----
 
     @PostMapping("/triagem")
-    @PreAuthorize("hasRole('TECNICO')")
+    @PreAuthorize("hasAnyRole('TECNICO','MONITOR','GESTOR','ADMIN')")
     public ResponseEntity<TriagemDTO> registrarTriagem(@PathVariable UUID eventoId,
                                                        @Valid @RequestBody TriagemRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(triagemService.registrar(eventoId, req));

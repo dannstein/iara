@@ -84,9 +84,9 @@ export function NotificacaoPrefsPage() {
 
       <Card className="mb-4 border-rose-500/30 bg-rose-500/5">
         <p className="text-[12px] leading-relaxed text-ink-secondary">
-          <strong className="text-ink-primary">EMERGENCY sempre passa.</strong> Alertas
-          marcados como EMERGENCY ignoram qualquer opt-out — é uma exigência de segurança
-          vital, não há como desabilitar.
+          <strong className="text-ink-primary">EMERGENCY e CRITICAL sempre passam.</strong>{' '}
+          Alertas com essas severidades ignoram qualquer opt-out — é uma exigência de
+          segurança vital, não há como desabilitar.
         </p>
       </Card>
 
