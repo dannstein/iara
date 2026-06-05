@@ -7,9 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
+import { useAlerta } from '../../context/AlertaContext';
 import { LeafletMap, type MapMarker, type MapCircle, type MapPolygon } from '../../components/LeafletMap';
 import { DonateButton } from '../../components/DonateButton';
 import { apiCached } from '../../lib/cache';
+import { api } from '../../services/api';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -86,6 +88,7 @@ const ZONA_COLOR = (nivel: number) =>
 
 export default function Home() {
   const { role, email, accessToken } = useAuth();
+  const { notificationCount } = useAlerta();
   const isDoador = DOADOR_ROLES.has(role ?? '');
   const layers   = isDoador ? DOADOR_LAYERS : STAFF_LAYERS;
 
@@ -102,15 +105,23 @@ export default function Home() {
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${accessToken}` }), [accessToken]);
 
-  // Localização do usuário para centralizar o mapa
+  // Localização do usuário: centraliza o mapa e sincroniza com o backend
+  // para que o geofencing de alertas funcione corretamente.
   useEffect(() => {
+    if (!accessToken) return;
     Location.requestForegroundPermissionsAsync().then(({ status }) => {
       if (status !== 'granted') return;
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-        .then((pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }))
+        .then((pos) => {
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setUserLocation(loc);
+          api.put('/usuarios/me', { localizacao: loc }, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }).catch(() => {});
+        })
         .catch(() => {});
     }).catch(() => {});
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -197,10 +208,28 @@ export default function Home() {
 
       {/* ── Saudação ── */}
       <View style={styles.topBar}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.greetingLabel}>Bem-vindo,</Text>
           <Text style={styles.greetingName} numberOfLines={1}>{displayName}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.bellBtn}
+          onPress={() => router.push('/alertas' as never)}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={notificationCount > 0 ? 'notifications' : 'notifications-outline'}
+            size={22}
+            color={notificationCount > 0 ? Colors.brand.dark_orange : Colors.blue.dark}
+          />
+          {notificationCount > 0 && (
+            <View style={styles.bellBadge}>
+              <Text style={styles.bellBadgeText}>
+                {notificationCount > 9 ? '9+' : notificationCount}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* ── Botão de doação (Doador only) ── */}
@@ -307,12 +336,28 @@ const styles = StyleSheet.create({
 
   // Top bar
   topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 6,
   },
   greetingLabel: { fontSize: 13, color: '#64748B' },
-  greetingName:  { fontSize: 20, fontWeight: '800', color: Colors.blue.dark, textTransform: 'capitalize', maxWidth: 260 },
+  greetingName:  { fontSize: 20, fontWeight: '800', color: Colors.blue.dark, textTransform: 'capitalize' },
+  bellBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#E2E8F0', elevation: 1,
+    marginLeft: 8,
+  },
+  bellBadge: {
+    position: 'absolute', top: -3, right: -3,
+    backgroundColor: Colors.brand.dark_orange,
+    borderRadius: 8, minWidth: 16, height: 16,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
 
   donateBtn: { marginHorizontal: 12, marginBottom: 8 },
 

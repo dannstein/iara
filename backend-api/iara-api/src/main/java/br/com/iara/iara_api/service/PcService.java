@@ -122,6 +122,13 @@ public class PcService {
         return PcDTO.from(pc);
     }
 
+    @Transactional
+    public PcDTO ativar(UUID id) {
+        Pc pc = buscarVisivel(id);
+        pc.setActive(true);
+        return PcDTO.from(pc);
+    }
+
     // -------------------------------------------------------------- vínculo evento
 
     @Transactional(readOnly = true)

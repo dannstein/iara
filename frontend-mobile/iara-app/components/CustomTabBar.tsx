@@ -50,6 +50,7 @@ export function CustomTabBar({ state, descriptors, navigation }: any) {
         switch (route.name) {
           case 'home':   iconName = isFocused ? 'home'        : 'home-outline';        break;
           case 'events': iconName = isFocused ? 'thunderstorm': 'thunderstorm-outline'; break;
+          case 'meupc':  iconName = isFocused ? 'storefront'  : 'storefront-outline';  break;
           case 'pontos': iconName = isFocused ? 'map'         : 'map-outline';          break;
           case 'menu':   iconName = isFocused ? 'menu'        : 'menu-outline';         break;
           default:       iconName = 'alert-circle-outline';

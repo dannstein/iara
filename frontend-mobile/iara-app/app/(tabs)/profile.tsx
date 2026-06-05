@@ -14,7 +14,7 @@ import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { api } from '../../services/api';
+import { apiCached } from '../../lib/cache';
 import { useAppModal } from '../../components/AppModal';
 
 // ── Labels de cargo ───────────────────────────────────────────
@@ -77,15 +77,15 @@ export default function Profile() {
   useEffect(() => {
     if (!accessToken) return;
 
-    api.get<UsuarioDTO>('/usuarios/me', { headers })
-      .then((res) => setUsuario(res.data))
+    apiCached<UsuarioDTO>('/usuarios/me', headers)
+      .then((data) => setUsuario(data))
       .catch(() => {})
       .finally(() => setLoading(false));
 
     if (tenantId) {
       // GESTOR+ recebe o nome; DOADOR recebe 403 — silenciamos o erro
-      api.get<TenantDTO>(`/tenants/${tenantId}`, { headers })
-        .then((res) => setTenant(res.data))
+      apiCached<TenantDTO>(`/tenants/${tenantId}`, headers)
+        .then((data) => setTenant(data))
         .catch(() => {});
     }
   }, [accessToken, headers, tenantId]);

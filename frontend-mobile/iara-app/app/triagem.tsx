@@ -1,114 +1,144 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../constants/theme'; 
+import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { Colors } from '../constants/theme';
 
 export default function Triagem() {
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-                
-                <View style={styles.header}>
-                    <Text style={styles.title}>Junte-se ao IARA</Text>
-                    <Text style={styles.subtitle}>Como você deseja contribuir com a nossa rede de apoio?</Text>
-                </View>
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <StatusBar style="light" backgroundColor={Colors.blue.dark} />
 
-                <View style={styles.cardsContainer}>
-                    {/* Botão Quero Doar */}
-                    <TouchableOpacity 
-                        style={styles.card} 
-                        onPress={() => router.push('/signup-doador')}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.cardTitle}>Quero Doar!</Text>
-                        <Text style={styles.cardDescription}>
-                            Cadastre-se por aqui, se você quer ajudar doando para quem precisa.
-                        </Text>
-                    </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scroll} style={styles.scrollView} showsVerticalScrollIndicator={false}>
 
-                    {/* Botão Quero Atuar */}
-                    <TouchableOpacity 
-                        style={[styles.card, styles.cardSecondary]} 
-                        onPress={() => router.push('/signup-voluntario')}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.cardTitle}>Quero Atuar!</Text>
-                        <Text style={styles.cardDescription}>
-                            Se você quer ser um voluntário e quer se disponibilizar para ser convocado para ajudar.
-                        </Text>
-                    </TouchableOpacity>
-                </View>
+        {/* ── Área azul — marca ── */}
+        <View style={styles.hero}>
+          <Image
+            source={require('@/assets/images/logo.png')}
+            style={styles.logo}
+          />
+          <Text style={styles.brand}>IARA</Text>
+          <Text style={styles.tagline}>Defesa Civil Digital</Text>
+        </View>
 
-                {/* Botão para voltar caso o usuário tenha clicado em cadastrar sem querer */}
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Text style={styles.backButtonText}>Voltar para o Login</Text>
-                </TouchableOpacity>
+        {/* ── Card branco — opções ── */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Junte-se ao IARA</Text>
+          <Text style={styles.cardSubtitle}>
+            Como você deseja contribuir com a nossa rede de apoio?
+          </Text>
 
-            </ScrollView>
-        </SafeAreaView>
-    );
+          <View style={styles.options}>
+
+            {/* Doador */}
+            <TouchableOpacity
+              style={styles.optionCard}
+              onPress={() => router.push('/signup-doador' as never)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: `${Colors.brand.dark_orange}18` }]}>
+                <Ionicons name="heart" size={32} color={Colors.brand.dark_orange} />
+              </View>
+              <View style={styles.optionText}>
+                <Text style={[styles.optionTitle, { color: Colors.brand.dark_orange }]}>
+                  Quero Doar!
+                </Text>
+                <Text style={styles.optionDesc}>
+                  Ajude entregando doações e materiais para quem precisa.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+            </TouchableOpacity>
+
+            {/* Voluntário */}
+            <TouchableOpacity
+              style={styles.optionCard}
+              onPress={() => router.push('/signup-voluntario' as never)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: `${Colors.blue.dark}18` }]}>
+                <Ionicons name="shield-checkmark" size={32} color={Colors.blue.dark} />
+              </View>
+              <View style={styles.optionText}>
+                <Text style={[styles.optionTitle, { color: Colors.blue.dark }]}>
+                  Quero Atuar!
+                </Text>
+                <Text style={styles.optionDesc}>
+                  Cadastre-se como voluntário técnico para ser convocado em emergências.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+            </TouchableOpacity>
+
+          </View>
+
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backBtnText}>Já tenho conta. Fazer login.</Text>
+          </TouchableOpacity>
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: "#FEFEFE",
-    },
-    container: {
-        flexGrow: 1,
-        padding: 32,
-        justifyContent: 'center',
-    },
-    header: {
-        marginBottom: 40,
-    },
-    title: {
-        fontSize: 32,
-        fontWeight: "800",
-        color: "#082B97",
-        marginBottom: 8,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: "#5e5e5e",
-        lineHeight: 24,
-    },
-    cardsContainer: {
-        gap: 24,
-    },
-    card: {
-        backgroundColor: Colors.brand?.orange || "#FF8A00", // Fallback para o laranja caso o import mude
-        padding: 24,
-        borderRadius: 16,
-        elevation: 3,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 6,
-    },
-    cardSecondary: {
-        backgroundColor: "#2F9FF2", // Azul para diferenciar o voluntário
-    },
-    cardTitle: {
-        color: "#FFFFFF",
-        fontSize: 24,
-        fontWeight: "bold",
-        marginBottom: 8,
-    },
-    cardDescription: {
-        color: "#FFFFFF",
-        fontSize: 15,
-        lineHeight: 22,
-        opacity: 0.9,
-    },
-    backButton: {
-        marginTop: 40,
-        alignItems: 'center',
-    },
-    backButtonText: {
-        color: "#5e5e5e",
-        fontWeight: "600",
-        fontSize: 16,
-    }
+  safe:       { flex: 1, backgroundColor: Colors.blue.dark },
+  scrollView: { backgroundColor: '#fff' },
+  scroll:     { flexGrow: 1 },
+
+  hero: {
+    backgroundColor: Colors.blue.dark,
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 36,
+    gap: 4,
+  },
+  logo:    { width: 100, height: 100, resizeMode: 'contain' },
+  brand:   { fontSize: 48, fontWeight: '900', color: Colors.brand.orange, letterSpacing: 4, marginTop: 4 },
+  tagline: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.6)', letterSpacing: 1, textTransform: 'uppercase' },
+
+  card: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 40,
+    minHeight: 440,
+  },
+  cardTitle:    { fontSize: 22, fontWeight: '800', color: Colors.blue.dark },
+  cardSubtitle: { fontSize: 14, color: '#64748B', marginTop: 6, marginBottom: 24, lineHeight: 20 },
+
+  options: { gap: 14 },
+
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionText:  { flex: 1, gap: 4 },
+  optionTitle: { fontSize: 17, fontWeight: '800' },
+  optionDesc:  { fontSize: 12, color: '#64748B', lineHeight: 17 },
+
+  backBtn: { marginTop: 28, alignItems: 'center' },
+  backBtnText: { fontSize: 14, fontWeight: '600', color: Colors.blue.medium },
 });

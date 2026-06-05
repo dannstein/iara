@@ -64,8 +64,10 @@ public class EspecialidadeService {
 
     @Transactional(readOnly = true)
     public List<EspecDTO> listarEspecs(UUID idCategoria) {
-        // Endpoint público (idem listarCategorias).
-        UUID tenantId = optionalTenantId();
+        // tenantIdOrNull: retorna null para requisicoes sem autenticacao (cadastro publico).
+        // Com null, a query retorna apenas especialidades globais (tenant IS NULL),
+        // que e o conjunto correto para o formulario de cadastro de voluntario.
+        UUID tenantId = currentUser.tenantIdOrNull();
         return especRepository.findGlobaisOuDoTenant(tenantId, idCategoria).stream()
                 .map(EspecDTO::from).toList();
     }

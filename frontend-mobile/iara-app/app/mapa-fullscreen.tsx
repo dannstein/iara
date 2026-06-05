@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,6 @@ import {
   type MapCircle,
   type MapPolygon,
 } from '../components/LeafletMap';
-import { ChipBar, type ChipOption } from '../components/ChipBar';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -51,20 +50,24 @@ interface PontoApoioDTO {
   isActive: boolean;
 }
 
+// ── Configuração de camadas ───────────────────────────────────
+
+interface LayerConfig { key: string; label: string; color: string }
+
+const DOADOR_LAYERS: LayerConfig[] = [
+  { key: 'eventos',       label: 'Eventos Ativos',   color: '#EF4444'        },
+  { key: 'pontos-coleta', label: 'Pontos de Coleta',  color: Colors.blue.dark },
+  { key: 'zonas-risco',   label: 'Zonas de Risco',   color: '#EAB308'        },
+];
+
+const STAFF_LAYERS: LayerConfig[] = [
+  { key: 'eventos',       label: 'Eventos Ativos',   color: '#EF4444'        },
+  { key: 'pontos-coleta', label: 'Pontos de Coleta',  color: Colors.blue.dark },
+  { key: 'zonas-risco',   label: 'Zonas de Risco',   color: '#EAB308'        },
+  { key: 'pontos-apoio',  label: 'Pontos de Apoio',  color: '#F97316'        },
+];
+
 const DOADOR_ROLES = new Set(['DOADOR', 'USUARIO_SIMPLES']);
-
-const DOADOR_CHIPS: ChipOption[] = [
-  { key: 'eventos',       label: 'Eventos'           },
-  { key: 'pontos-coleta', label: 'Pontos de Coleta'  },
-  { key: 'zonas-risco',   label: 'Zonas de Risco'    },
-];
-
-const STAFF_CHIPS: ChipOption[] = [
-  { key: 'eventos',       label: 'Eventos'           },
-  { key: 'pontos-coleta', label: 'Pontos de Coleta'  },
-  { key: 'zonas-risco',   label: 'Zonas de Risco'    },
-  { key: 'pontos-apoio',  label: 'Pontos de Apoio'   },
-];
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -79,22 +82,16 @@ const ZONA_COLOR = (nivel: number) =>
   nivel >= 4 ? '#EF4444' : nivel === 3 ? '#F97316' : nivel === 2 ? '#EAB308' : '#22C55E';
 
 // ── Tela ─────────────────────────────────────────────────────
-// O mapa fullscreen exibe as MESMAS camadas que o mini mapa da home.
-// A única diferença é o tamanho (tela cheia).
-//
-// Camadas para todos os roles:
-//   • Eventos ativos — markers (epicentro) + circles (raio)
-//   • Zonas de risco — circles (ponto+raio) ou polygons (GeoJSON)
-//   • Pontos de coleta ativos — markers azuis
 
 export default function MapaFullscreen() {
   const { accessToken, role } = useAuth();
   const isDoador = DOADOR_ROLES.has(role ?? '');
-  const chips    = isDoador ? DOADOR_CHIPS : STAFF_CHIPS;
+  const layers   = isDoador ? DOADOR_LAYERS : STAFF_LAYERS;
 
   const [activeFilters, setActiveFilters] = useState<Set<string>>(
-    () => new Set(chips.map((c) => c.key)),
+    () => new Set(layers.map((l) => l.key)),
   );
+  const [showLayers, setShowLayers] = useState(false);
 
   const [eventos,     setEventos    ] = useState<EventoDTO[]>([]);
   const [pcs,         setPcs        ] = useState<PcDTO[]>([]);
@@ -182,6 +179,8 @@ export default function MapaFullscreen() {
     [zonas, activeFilters],
   );
 
+  const hiddenCount = layers.filter((l) => !activeFilters.has(l.key)).length;
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" backgroundColor="transparent" translucent />
@@ -194,7 +193,7 @@ export default function MapaFullscreen() {
         onMarkerPress={handleMarkerPress}
       />
 
-      {/* Overlay: botão fechar + título + chips */}
+      {/* Overlay: botão fechar + título + botão camadas */}
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         <View pointerEvents="box-none">
           <View style={styles.header} pointerEvents="box-none">
@@ -205,26 +204,27 @@ export default function MapaFullscreen() {
             >
               <Ionicons name="close" size={20} color="#fff" />
             </TouchableOpacity>
-            <View style={styles.titlePill}>
-              <Text style={styles.titleText}>Mapa de Ocorrências</Text>
-            </View>
-          </View>
-
-          {/* Chips de filtro */}
-          <View style={styles.chipsWrapper} pointerEvents="box-none">
-            <ChipBar
-              options={chips}
-              selectedKeys={[...activeFilters]}
-              onToggle={toggleFilter}
-            />
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              style={[styles.layerBtn, hiddenCount > 0 && styles.layerBtnDimmed]}
+              onPress={() => setShowLayers(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="layers-outline" size={16} color={hiddenCount > 0 ? '#F97316' : '#fff'} />
+              {hiddenCount > 0 && (
+                <View style={styles.layerBadge}>
+                  <Text style={styles.layerBadgeText}>{hiddenCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* Legenda */}
         <View style={styles.legendContainer} pointerEvents="none">
           <LegendItem color={Colors.blue.dark} label="Ponto de coleta" />
-          <LegendItem color="#F97316" label="Ponto de apoio" />
-          {!isDoador && Object.entries(SEVERITY_COLOR).map(([key, color]) => (
+          {!isDoador && <LegendItem color="#F97316" label="Ponto de apoio" />}
+          {Object.entries(SEVERITY_COLOR).map(([key, color]) => (
             <LegendItem
               key={key}
               color={color}
@@ -237,6 +237,57 @@ export default function MapaFullscreen() {
           ))}
         </View>
       </SafeAreaView>
+
+      {/* Modal de camadas */}
+      <Modal
+        visible={showLayers}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLayers(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowLayers(false)}>
+          <View style={styles.layerCard} onStartShouldSetResponder={() => true}>
+            <View style={styles.layerCardHeader}>
+              <Ionicons name="layers-outline" size={18} color={Colors.blue.dark} />
+              <Text style={styles.layerCardTitle}>Camadas do Mapa</Text>
+              <TouchableOpacity onPress={() => setShowLayers(false)} hitSlop={12}>
+                <Ionicons name="close" size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            {layers.map((layer, i) => {
+              const active = activeFilters.has(layer.key);
+              return (
+                <TouchableOpacity
+                  key={layer.key}
+                  style={[styles.layerItem, i < layers.length - 1 && styles.layerItemBorder]}
+                  onPress={() => toggleFilter(layer.key)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.layerSwatch, { backgroundColor: layer.color }]} />
+                  <Text style={[styles.layerLabel, !active && styles.layerLabelOff]}>
+                    {layer.label}
+                  </Text>
+                  <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                    {active && <Ionicons name="checkmark" size={13} color="#fff" />}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <View style={styles.layerActions}>
+              <TouchableOpacity
+                onPress={() => setActiveFilters(new Set(layers.map((l) => l.key)))}
+              >
+                <Text style={styles.layerAction}>Mostrar todas</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setActiveFilters(new Set())}>
+                <Text style={[styles.layerAction, { color: '#EF4444' }]}>Ocultar todas</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -267,18 +318,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
   },
-  chipsWrapper: {
-    marginTop: 8,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderRadius: 24,
-    marginHorizontal: 12,
-    paddingVertical: 6,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-  },
   closeBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -286,11 +325,20 @@ const styles = StyleSheet.create({
     elevation: 4, shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4,
   },
-  titlePill: {
+  layerBtn: {
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
+    alignItems: 'center', justifyContent: 'center',
+    elevation: 4, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4,
   },
-  titleText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  layerBtnDimmed: { backgroundColor: 'rgba(249,115,22,0.85)' },
+  layerBadge: {
+    position: 'absolute', top: -3, right: -3,
+    backgroundColor: '#fff', borderRadius: 7,
+    width: 14, height: 14, alignItems: 'center', justifyContent: 'center',
+  },
+  layerBadgeText: { fontSize: 9, fontWeight: '800', color: '#F97316' },
 
   legendContainer: {
     margin: 16, alignSelf: 'flex-start',
@@ -301,4 +349,64 @@ const styles = StyleSheet.create({
   legendItem:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
   legendDot:   { width: 10, height: 10, borderRadius: 5 },
   legendText:  { fontSize: 12, color: '#1E293B', fontWeight: '500' },
+
+  // Modal camadas
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  layerCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+  },
+  layerCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  layerCardTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: '#1E293B' },
+  layerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  layerItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  layerSwatch:     { width: 12, height: 12, borderRadius: 6 },
+  layerLabel:      { flex: 1, fontSize: 14, color: '#1E293B', fontWeight: '500' },
+  layerLabelOff:   { color: '#94A3B8' },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 1.5, borderColor: '#CBD5E1',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  checkboxActive: {
+    backgroundColor: Colors.blue.dark,
+    borderColor: Colors.blue.dark,
+  },
+  layerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  layerAction: { fontSize: 12, fontWeight: '600', color: Colors.blue.medium },
 });

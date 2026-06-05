@@ -62,9 +62,7 @@ export default function AbrigosScreen() {
   const fetch = useCallback(async (force = false) => {
     if (!accessToken) return;
     try {
-      const data = force
-        ? (await api.get<AbrigoDTO[]>('/abrigos?is_active=true', { headers })).data
-        : await apiCached<AbrigoDTO[]>('/abrigos?is_active=true', headers, TTL.abrigos);
+      const data = await apiCached<AbrigoDTO[]>('/abrigos?is_active=true', headers, TTL.abrigos);
       setAbrigos(data);
     } catch {} finally {
       setLoading(false); setRefreshing(false);

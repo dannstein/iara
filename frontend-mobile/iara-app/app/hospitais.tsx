@@ -61,9 +61,7 @@ export default function HospitaisScreen() {
   const fetch = useCallback(async (force = false) => {
     if (!accessToken) return;
     try {
-      const data = force
-        ? (await api.get<HospitalDTO[]>('/hospitais', { headers })).data
-        : await apiCached<HospitalDTO[]>('/hospitais', headers, TTL.hospitais);
+      const data = await apiCached<HospitalDTO[]>('/hospitais', headers, TTL.hospitais);
       setHospitais(data.filter((h) => h.isActive));
     } catch {} finally {
       setLoading(false); setRefreshing(false);

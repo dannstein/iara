@@ -70,6 +70,12 @@ public class PcController {
         return service.desativar(id);
     }
 
+    @PatchMapping("/{id}/ativar")
+    @PreAuthorize("hasRole('COORDENADOR')")
+    public PcDTO ativar(@PathVariable UUID id) {
+        return service.ativar(id);
+    }
+
     // ---- 13.2 vínculo PC ↔ evento ----
 
     @GetMapping("/{id}/eventos")

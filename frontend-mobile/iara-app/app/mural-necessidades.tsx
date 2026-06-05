@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
+import { apiCached, TTL } from '../lib/cache';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -59,11 +59,12 @@ export default function MuralNecessidades() {
   const fetchDemandas = useCallback(async (force = false) => {
     if (!accessToken || !id) return;
     try {
-      const res = await api.get<DemandaDTO[]>(
+      const data = await apiCached<DemandaDTO[]>(
         `/pontos-coleta/${id}/demandas?is_active=true`,
-        { headers },
+        headers,
+        TTL.pontos,
       );
-      const sorted = [...res.data].sort(
+      const sorted = [...data].sort(
         (a, b) => PRIORIDADE_ORDER.indexOf(a.prioridade) - PRIORIDADE_ORDER.indexOf(b.prioridade),
       );
       setDemandas(sorted);
