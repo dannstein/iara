@@ -38,4 +38,8 @@ public class PcEstoque {
     @UpdateTimestamp
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
+
+    @Version
+    @Column(nullable = false)
+    private int version;
 }

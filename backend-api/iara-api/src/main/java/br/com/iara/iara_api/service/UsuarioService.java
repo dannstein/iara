@@ -50,6 +50,7 @@ public class UsuarioService {
     private final VitimaTriagemRepository triagemRepository;
     private final ZonaRiscoRepository zonaRiscoRepository;
     private final EventoRepository eventoRepository;
+    private final PcRepository pcRepository;
 
     // ---------------------------------------------------------------- cadastro
 
@@ -63,10 +64,57 @@ public class UsuarioService {
         return cadastrarAprovado(req, "USUARIO_SIMPLES");
     }
 
+    /**
+     * Sub-fase 4A — cria o COORDENADOR + Endereco + Pc na mesma transação.
+     * O PC nasce com {@code statusVerificacao=PENDENTE_VERIFICACAO_GESTOR} e
+     * {@code isActive=false}; depende de aprovação do gestor para entrar em
+     * operação (via {@code PATCH /pontos-coleta/{id}/verificar}).
+     */
     @Transactional
     public TokenResponse cadastrarCoordenador(CadastroPublicoRequest req) {
-        // O ponto de coleta vinculado é criado no módulo de PC (Fase 3).
-        return cadastrarAprovado(req, "COORDENADOR");
+        if (req.endereco() == null) {
+            throw new BusinessException("Coordenador exige endereço para criação do Ponto de Coleta");
+        }
+        if (req.endereco().coordenadas() == null) {
+            throw new BusinessException("Endereço do coordenador precisa ter coordenadas (lat/lng)");
+        }
+        if (req.pcNome() == null || req.pcNome().isBlank()) {
+            throw new BusinessException("Nome do Ponto de Coleta é obrigatório para coordenador");
+        }
+
+        validarUnico(req.email(), req.documento());
+        Tenant tenant = tenantRepository.findById(req.tenantId())
+                .orElseThrow(() -> new NotFoundException("Tenant não encontrado"));
+        Role role = roleRepository.findByRoleNome("COORDENADOR")
+                .orElseThrow(() -> new NotFoundException("Perfil COORDENADOR não encontrado"));
+
+        Endereco endereco = salvarEndereco(req.endereco(), null);
+
+        Usuario u = new Usuario();
+        u.setNome(req.nome());
+        u.setEmail(req.email());
+        u.setTelefone(req.telefone());
+        u.setDocumento(req.documento());
+        u.setSenhaHash(passwordEncoder.encode(req.senha()));
+        u.setTenant(tenant);
+        u.setRole(role);
+        u.setEndereco(endereco);
+        u.setCadastroSts("APROVADO");
+        u.setDataAprovacaoCadastro(OffsetDateTime.now());
+        usuarioRepository.save(u);
+
+        // PC criado em estado pendente — só vai pra ativo após verificação do gestor.
+        Pc pc = new Pc();
+        pc.setTenant(tenant);
+        pc.setCoordenador(u);
+        pc.setEndereco(endereco);
+        pc.setPcNome(req.pcNome());
+        pc.setPcCoords(GeoUtil.point(req.endereco().coordenadas()));
+        pc.setStatusVerificacao("PENDENTE_VERIFICACAO_GESTOR");
+        pc.setActive(false);
+        pcRepository.save(pc);
+
+        return refreshTokenService.issueTokenPair(u);
     }
 
     private TokenResponse cadastrarAprovado(CadastroPublicoRequest req, String roleNome) {
@@ -173,10 +221,16 @@ public class UsuarioService {
     }
 
     @Transactional(readOnly = true)
-    public List<UsuarioDTO> listar(String role, String status, UUID especId) {
+    public List<UsuarioDTO> listar(String role, String status, UUID especId, Boolean semPc) {
         Usuario u = currentUser.require();
-        return usuarioRepository.filtrar(tenantScope.visibleTenantIds(u), role, status, especId)
-                .stream().map(UsuarioDTO::from).toList();
+        var users = usuarioRepository.filtrar(tenantScope.visibleTenantIds(u), role, status, especId);
+        if (Boolean.TRUE.equals(semPc)) {
+            // Sub-fase 4A — só os que NÃO têm PC ativo (usado pelo gestor para vincular).
+            users = users.stream()
+                    .filter(usr -> !pcRepository.existsByCoordenadorIdAndIsActiveTrue(usr.getId()))
+                    .toList();
+        }
+        return users.stream().map(UsuarioDTO::from).toList();
     }
 
     @Transactional(readOnly = true)

@@ -10,26 +10,32 @@ public record PcDTO(
         UUID id,
         UUID tenantId,
         UUID coordenadorId,
+        UUID enderecoId,
         String pcNome,
         String pcTipo,
         CoordenadasDTO coordenadas,
         String pcDesc,
         String pcContato,
         boolean pcIsVerified,
-        boolean isActive
+        boolean isActive,
+        String statusVerificacao,
+        String motivoRejeicao
 ) {
     public static PcDTO from(Pc p) {
         return new PcDTO(
                 p.getId(),
                 p.getTenant().getId(),
                 p.getCoordenador().getId(),
+                p.getEndereco() != null ? p.getEndereco().getId() : null,
                 p.getPcNome(),
                 p.getPcTipo(),
                 GeoUtil.toCoordenadas(p.getPcCoords()),
                 p.getPcDesc(),
                 p.getPcContato(),
                 p.isPcIsVerified(),
-                p.isActive()
+                p.isActive(),
+                p.getStatusVerificacao(),
+                p.getMotivoRejeicao()
         );
     }
 }

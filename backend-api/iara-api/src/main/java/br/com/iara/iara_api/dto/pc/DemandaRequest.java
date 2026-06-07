@@ -10,6 +10,8 @@ public record DemandaRequest(
         @NotNull UUID idTipo,
         String prioridade,
         @NotNull @Positive Integer qtdSolicitada,
-        String descricao
+        String descricao,
+        // Fase 4C — limite hard opcional. Se omitido, herda PcCapacidade default.
+        @Positive Integer qtdMaximaCapacidade
 ) {
 }

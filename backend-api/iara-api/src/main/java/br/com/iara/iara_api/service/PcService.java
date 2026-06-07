@@ -29,6 +29,8 @@ public class PcService {
     private final DemandaTipoRepository demandaTipoRepository;
     private final UsuarioRepository usuarioRepository;
     private final RoleRepository roleRepository;
+    private final EnderecoRepository enderecoRepository;
+    private final InventoryTransactionRepository inventoryRepository;
     private final CurrentUser currentUser;
     private final TenantScope tenantScope;
 
@@ -48,24 +50,103 @@ public class PcService {
 
     @Transactional
     public PcDTO criar(CreatePcRequest req) {
-        Usuario u = currentUser.require();
+        Usuario actor = currentUser.require();
+        boolean isGestor = "GESTOR".equals(actor.getRole().getRoleNome())
+                || "ADMIN".equals(actor.getRole().getRoleNome());
+
+        // Identifica o coordenador-alvo. Coordenador-self-create: idCoordenador omitido.
+        Usuario coordenador;
+        if (req.idCoordenador() != null) {
+            if (!isGestor) {
+                throw new ForbiddenException("Apenas gestores podem vincular outro usuário como coordenador");
+            }
+            coordenador = usuarioRepository.findById(req.idCoordenador())
+                    .orElseThrow(() -> new NotFoundException("Usuário coordenador não encontrado"));
+            if (!tenantScope.canSee(actor, coordenador.getTenant().getId())) {
+                throw new ForbiddenException("Coordenador fora do seu escopo de tenant");
+            }
+        } else {
+            coordenador = actor;
+        }
+
+        // Validação 1:1 — coordenador não pode ter outro PC ativo.
+        if (pcRepository.existsByCoordenadorIdAndIsActiveTrue(coordenador.getId())) {
+            throw new ConflictException("Coordenador já está vinculado a um PC ativo");
+        }
+
+        // Promove papel se gestor está promovendo (rank < COORDENADOR).
+        if (req.idCoordenador() != null
+                && rank(coordenador.getRole().getRoleNome()) < rank("COORDENADOR")) {
+            Role papel = roleRepository.findByRoleNome("COORDENADOR")
+                    .orElseThrow(() -> new NotFoundException("Perfil COORDENADOR não encontrado"));
+            coordenador.setRole(papel);
+            usuarioRepository.save(coordenador);
+        }
+
+        // Resolve endereço + coordenadas: endereço.coordenadas têm precedência.
+        // Quando o endereço é fornecido, persiste; senão preserva o fluxo legado.
+        Endereco endereco = null;
+        if (req.endereco() != null) {
+            if (req.endereco().coordenadas() == null) {
+                throw new BusinessException("Endereço precisa ter coordenadas (lat/lng)");
+            }
+            endereco = enderecoFromInput(req.endereco());
+        }
+        var coordsSource = endereco != null
+                ? req.endereco().coordenadas()
+                : req.coordenadas();
+        if (coordsSource == null) {
+            throw new BusinessException("Coordenadas obrigatórias (no endereço ou no campo coordenadas)");
+        }
+
         Pc pc = new Pc();
-        pc.setTenant(u.getTenant());
-        pc.setCoordenador(u);
+        pc.setTenant(coordenador.getTenant());
+        pc.setCoordenador(coordenador);
+        pc.setEndereco(endereco);
         pc.setPcNome(req.pcNome());
         if (req.pcTipo() != null) {
             pc.setPcTipo(req.pcTipo());
         }
-        pc.setPcCoords(GeoUtil.point(req.coordenadas()));
+        pc.setPcCoords(GeoUtil.point(coordsSource));
         pc.setPcDesc(req.pcDesc());
         pc.setPcContato(req.pcContato());
+
+        // Gestor cria PC já verificado e ativo; coordenador self-create aguarda aprovação.
+        if (isGestor) {
+            pc.setStatusVerificacao("VERIFICADO");
+            pc.setPcIsVerified(true);
+            pc.setVerificador(actor);
+            pc.setDataVerificacao(OffsetDateTime.now());
+            pc.setActive(true);
+        } else {
+            pc.setStatusVerificacao("PENDENTE_VERIFICACAO_GESTOR");
+            pc.setActive(false);
+        }
         return PcDTO.from(pcRepository.save(pc));
     }
 
+    /** Helper para criar Endereco a partir do input do request. Reusa GeoUtil. */
+    private Endereco enderecoFromInput(br.com.iara.iara_api.dto.usuario.UpdateMeRequest.EnderecoInput in) {
+        Endereco e = new Endereco();
+        e.setCep(in.cep());
+        e.setLogradouro(in.logradouro());
+        e.setNumero(in.numero());
+        e.setComplemento(in.complemento());
+        e.setBairro(in.bairro());
+        e.setCidade(in.cidade());
+        e.setUf(in.uf());
+        if (in.coordenadas() != null) {
+            e.setCoordenadas(GeoUtil.point(in.coordenadas()));
+        }
+        return enderecoRepository.save(e);
+    }
+
     @Transactional(readOnly = true)
-    public List<PcDTO> listar(Boolean isActive, Boolean isVerified, String pcTipo) {
+    public List<PcDTO> listar(Boolean isActive, Boolean isVerified, String pcTipo,
+                              String statusVerificacao) {
         Usuario u = currentUser.require();
-        return pcRepository.filtrar(tenantScope.visibleTenantIds(u), isActive, isVerified, pcTipo)
+        return pcRepository
+                .filtrar(tenantScope.visibleTenantIds(u), isActive, isVerified, pcTipo, statusVerificacao)
                 .stream().map(PcDTO::from).toList();
     }
 
@@ -107,11 +188,29 @@ public class PcService {
     }
 
     @Transactional
-    public PcDTO verificar(UUID id) {
+    public PcDTO verificar(UUID id, VerificarPcRequest req) {
         Pc pc = buscarVisivel(id);
-        pc.setPcIsVerified(true);
-        pc.setVerificador(currentUser.require());
-        pc.setDataVerificacao(OffsetDateTime.now());
+        boolean rejeitar = req != null && Boolean.TRUE.equals(req.rejeitar());
+        if (rejeitar) {
+            if (req.motivo() == null || req.motivo().isBlank()) {
+                throw new BusinessException("Motivo obrigatório ao rejeitar PC");
+            }
+            pc.setStatusVerificacao("REJEITADO");
+            pc.setMotivoRejeicao(req.motivo());
+            pc.setActive(false);
+        } else {
+            // Aprovação: evita conflito 1:1 caso coord tenha outro PC já ativo.
+            if (!pc.isActive()
+                    && pcRepository.existsByCoordenadorIdAndIsActiveTrue(pc.getCoordenador().getId())) {
+                throw new ConflictException("Coordenador já possui outro PC ativo — desativar antes");
+            }
+            pc.setStatusVerificacao("VERIFICADO");
+            pc.setPcIsVerified(true);
+            pc.setVerificador(currentUser.require());
+            pc.setDataVerificacao(OffsetDateTime.now());
+            pc.setActive(true);
+            pc.setMotivoRejeicao(null);
+        }
         return PcDTO.from(pc);
     }
 
@@ -272,5 +371,15 @@ public class PcService {
             throw new BusinessException("Helper não pertence a este PC");
         }
         return h;
+    }
+
+    // -------------------------------------------------------------- 4D: histórico inventário
+
+    @Transactional(readOnly = true)
+    public List<br.com.iara.iara_api.dto.pc.InventoryTransactionDTO> listarTransacoes(UUID pcId, UUID eventoId) {
+        buscarVisivel(pcId);
+        return inventoryRepository.listar(pcId, eventoId).stream()
+                .map(br.com.iara.iara_api.dto.pc.InventoryTransactionDTO::from)
+                .toList();
     }
 }
