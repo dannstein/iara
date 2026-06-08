@@ -16,7 +16,10 @@ public record DoacaoDTO(
         String status,
         String pdrReferencia,
         OffsetDateTime dataPrevista,
-        OffsetDateTime dataConfirmacao
+        OffsetDateTime dataConfirmacao,
+        // ----- Fase 4D -----
+        int qtdRecebida,
+        OffsetDateTime dataExpiracao
 ) {
     public static DoacaoDTO from(DoacaoIntencao d) {
         return new DoacaoDTO(
@@ -30,7 +33,9 @@ public record DoacaoDTO(
                 d.getStatus(),
                 d.getPdrReferencia(),
                 d.getDataPrevista(),
-                d.getDataConfirmacao()
+                d.getDataConfirmacao(),
+                d.getQtdRecebida(),
+                d.getDataExpiracao()
         );
     }
 }

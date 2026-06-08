@@ -38,4 +38,8 @@ public interface PcDemandaRepository extends JpaRepository<PcDemanda, UUID> {
                      d.created_at
             """, nativeQuery = true)
     List<PcDemanda> mural(@Param("eventoId") UUID eventoId);
+
+    /** Sub-fase 4D — usado no listener de EventoEncerradoEvent. */
+    @Query("select d from PcDemanda d where d.evento.id = :eventoId")
+    List<PcDemanda> listarPorEvento(@Param("eventoId") UUID eventoId);
 }

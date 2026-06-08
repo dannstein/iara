@@ -1,5 +1,5 @@
-import { UserCheck, FileText, ExternalLink } from 'lucide-react';
-import { Modal, Skeleton, SeverityBadge } from '@/components/ui';
+import { UserCheck, FileText, ExternalLink, Check, Ban } from 'lucide-react';
+import { Modal, Skeleton, SeverityBadge, Button } from '@/components/ui';
 import { useEventosAtendidos } from '@/hooks/useUsuarios';
 import { formatRelative } from '@/lib/utils';
 import type { UsuarioDTO } from '@/types/api';
@@ -8,10 +8,23 @@ interface Props {
   usuario: UsuarioDTO | null;
   especNome?: string;
   onClose: () => void;
+  onAprovar?: (u: UsuarioDTO) => void;
+  onRejeitar?: (u: UsuarioDTO) => void;
+  aprovando?: boolean;
 }
 
-export function VoluntarioDetailModal({ usuario, especNome, onClose }: Props) {
+export function VoluntarioDetailModal({
+  usuario,
+  especNome,
+  onClose,
+  onAprovar,
+  onRejeitar,
+  aprovando,
+}: Props) {
   const atendidos = useEventosAtendidos(usuario?.id);
+
+  const showActions =
+    !!usuario && usuario.cadastroSts === 'PENDENTE' && (!!onAprovar || !!onRejeitar);
 
   return (
     <Modal
@@ -21,6 +34,22 @@ export function VoluntarioDetailModal({ usuario, especNome, onClose }: Props) {
       eyebrow="Voluntário"
       icon={<UserCheck size={16} />}
       maxWidth="max-w-2xl"
+      footer={
+        showActions && usuario ? (
+          <>
+            {onRejeitar && (
+              <Button variant="danger" onClick={() => onRejeitar(usuario)}>
+                <Ban size={14} /> Rejeitar
+              </Button>
+            )}
+            {onAprovar && (
+              <Button onClick={() => onAprovar(usuario)} loading={aprovando}>
+                <Check size={14} /> Aprovar
+              </Button>
+            )}
+          </>
+        ) : undefined
+      }
     >
       {usuario && (
         <div className="flex flex-col gap-5">

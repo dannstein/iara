@@ -62,6 +62,13 @@ public class Pc {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    /** Sub-fase 4A — VERIFICADO | PENDENTE_VERIFICACAO_GESTOR | REJEITADO. */
+    @Column(name = "status_verificacao", nullable = false, length = 30)
+    private String statusVerificacao = "VERIFICADO";
+
+    @Column(name = "motivo_rejeicao", columnDefinition = "text")
+    private String motivoRejeicao;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

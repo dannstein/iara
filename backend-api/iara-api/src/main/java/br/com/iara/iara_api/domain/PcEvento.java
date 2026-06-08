@@ -41,4 +41,17 @@ public class PcEvento {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_usu_resp")
     private Usuario responsavel;
+
+    // ----- Fase 4B: motivo de recusa + optimistic locking -----
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_motivo_recusa")
+    private PcMotivoRecusa motivoRecusa;
+
+    @Column(name = "motivo_recusa_descricao", columnDefinition = "text")
+    private String motivoRecusaDescricao;
+
+    @Version
+    @Column(nullable = false)
+    private int version;
 }
