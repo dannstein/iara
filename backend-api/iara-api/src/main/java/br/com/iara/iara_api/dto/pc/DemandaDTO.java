@@ -2,6 +2,7 @@ package br.com.iara.iara_api.dto.pc;
 
 import br.com.iara.iara_api.domain.PcDemanda;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record DemandaDTO(
@@ -14,7 +15,14 @@ public record DemandaDTO(
         int qtdSolicitada,
         int qtdAtendida,
         String descricao,
-        boolean isActive
+        boolean isActive,
+        // ---- Fase 4C: lifecycle status + tracking
+        String status,
+        int qtdRecebida,
+        int qtdIntencionada,
+        Integer qtdMaximaCapacidade,
+        OffsetDateTime dataFechamento,
+        UUID idUsuFechou
 ) {
     public static DemandaDTO from(PcDemanda d) {
         return new DemandaDTO(
@@ -27,7 +35,13 @@ public record DemandaDTO(
                 d.getQtdSolicitada(),
                 d.getQtdAtendida(),
                 d.getDescricao(),
-                d.isActive()
+                d.isActive(),
+                d.getStatus(),
+                d.getQtdRecebida(),
+                d.getQtdIntencionada(),
+                d.getQtdMaximaCapacidade(),
+                d.getDataFechamento(),
+                d.getFechadoPor() != null ? d.getFechadoPor().getId() : null
         );
     }
 }

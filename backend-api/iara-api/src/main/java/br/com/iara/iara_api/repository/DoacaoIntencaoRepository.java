@@ -14,5 +14,9 @@ public interface DoacaoIntencaoRepository extends JpaRepository<DoacaoIntencao, 
 
     List<DoacaoIntencao> findByStatusAndDataPrevistaBefore(String status, java.time.OffsetDateTime limite);
 
+    /** Sub-fase 4D — usado pelo job de expiração (data_expiracao = now+48h). */
+    List<DoacaoIntencao> findByStatusAndDataExpiracaoBefore(String status,
+                                                            java.time.OffsetDateTime limite);
+
     List<DoacaoIntencao> findByUsuarioIdAndDataSincronizacaoIsNull(UUID usuarioId);
 }

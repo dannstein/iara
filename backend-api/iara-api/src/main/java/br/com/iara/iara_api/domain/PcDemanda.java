@@ -63,4 +63,31 @@ public class PcDemanda {
     @UpdateTimestamp
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
+
+    // ----- Fase 4C: lifecycle status + tracking quantitativo -----
+
+    /** OPEN | PARTIALLY_FULFILLED | FULFILLED | CLOSED. */
+    @Column(nullable = false, length = 30)
+    private String status = "OPEN";
+
+    @Column(name = "qtd_recebida", nullable = false)
+    private int qtdRecebida = 0;
+
+    @Column(name = "qtd_intencionada", nullable = false)
+    private int qtdIntencionada = 0;
+
+    /** Limite hard da demanda (opcional — usado para barrar criação acima da capacidade). */
+    @Column(name = "qtd_maxima_capacidade")
+    private Integer qtdMaximaCapacidade;
+
+    @Column(name = "data_fechamento")
+    private OffsetDateTime dataFechamento;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_usu_fechou")
+    private Usuario fechadoPor;
+
+    @Version
+    @Column(nullable = false)
+    private int version;
 }

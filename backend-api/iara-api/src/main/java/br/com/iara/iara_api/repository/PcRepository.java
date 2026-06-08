@@ -16,12 +16,14 @@ public interface PcRepository extends JpaRepository<Pc, UUID> {
               and (:isActive is null or p.isActive = :isActive)
               and (:isVerified is null or p.pcIsVerified = :isVerified)
               and (:pcTipo is null or p.pcTipo = :pcTipo)
+              and (:statusVerificacao is null or p.statusVerificacao = :statusVerificacao)
             order by p.pcNome
             """)
     List<Pc> filtrar(@Param("tenantIds") List<UUID> tenantIds,
                      @Param("isActive") Boolean isActive,
                      @Param("isVerified") Boolean isVerified,
-                     @Param("pcTipo") String pcTipo);
+                     @Param("pcTipo") String pcTipo,
+                     @Param("statusVerificacao") String statusVerificacao);
 
     /** PCs mais próximos de uma coordenada dentro do raio em metros (query 1 do DDL, RF06). */
     @Query(value = """
@@ -47,4 +49,7 @@ public interface PcRepository extends JpaRepository<Pc, UUID> {
                     :raio)
             """, nativeQuery = true)
     List<Pc> ativosNoRaioDoEvento(@Param("eventoId") UUID eventoId, @Param("raio") int raio);
+
+    /** Sub-fase 4A — verifica se um coordenador já tem PC ativo (validação 1:1). */
+    boolean existsByCoordenadorIdAndIsActiveTrue(UUID coordenadorId);
 }

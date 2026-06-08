@@ -24,16 +24,26 @@ import {
   useAprovarUsuario,
   useRejeitarUsuario,
 } from '@/hooks/useUsuarios';
-import { usePagination } from '@/hooks/useTenantTable';
+import { usePagination, useTenantOptions } from '@/hooks/useTenantTable';
 import { useAuthStore, hasRole } from '@/store/authStore';
 import { apiErrorMessage } from '@/lib/api';
-import type { UsuarioDTO } from '@/types/api';
+import type { CadastroStatus, UsuarioDTO } from '@/types/api';
+
+const STATUS_OPTIONS: { value: CadastroStatus | ''; label: string }[] = [
+  { value: '', label: 'Todos os status' },
+  { value: 'PENDENTE', label: 'Pendente' },
+  { value: 'APROVADO', label: 'Aprovado' },
+  { value: 'REJEITADO', label: 'Rejeitado' },
+];
 
 export function VoluntariosView() {
   const canManage = hasRole(useAuthStore((s) => s.user?.role), 'GESTOR');
   const categorias = useCategorias();
   const especs = useEspecs();
+  const { tenants, nameById: tenantNameById, multiTenant, inTenantScope } = useTenantOptions();
   const [especFilter, setEspecFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CadastroStatus | ''>('');
+  const [tenantFilter, setTenantFilter] = useState('');
   const [search, setSearch] = useState('');
   const [novaEspecOpen, setNovaEspecOpen] = useState(false);
   const [detalhe, setDetalhe] = useState<UsuarioDTO | null>(null);
@@ -46,19 +56,31 @@ export function VoluntariosView() {
 
   const voluntarios = useUsuariosList({
     role: 'TECNICO',
+    status: statusFilter || undefined,
     especialidade: especFilter || undefined,
   });
   const pendentes = useUsuariosList({ role: 'TECNICO', status: 'PENDENTE' });
   const aprovar = useAprovarUsuario();
   const [rejeitarTarget, setRejeitarTarget] = useState<UsuarioDTO | null>(null);
 
-  const filtered = (voluntarios.data ?? []).filter((u) =>
-    u.nome.toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = (voluntarios.data ?? []).filter((u) => {
+    if (!u.nome.toLowerCase().includes(search.toLowerCase())) return false;
+    if (tenantFilter && !inTenantScope(u.tenantId, tenantFilter)) return false;
+    return true;
+  });
   const { paged, page, setPage, total, pageSize } = usePagination(filtered, 10);
 
   const columns: Column<UsuarioDTO>[] = [
     { key: 'nome', label: 'Voluntário', render: (u) => <span className="font-medium text-ink-primary">{u.nome}</span> },
+    ...(multiTenant
+      ? [{
+          key: 'tenant' as const,
+          label: 'Tenant',
+          render: (u: UsuarioDTO) => (
+            <span className="text-[12px] text-ink-secondary">{tenantNameById[u.tenantId] ?? '—'}</span>
+          ),
+        }]
+      : []),
     {
       key: 'espec',
       label: 'Especialidade',
@@ -196,6 +218,31 @@ export function VoluntariosView() {
               <div className="flex flex-wrap gap-2">
                 <SearchInput value={search} onChange={setSearch} placeholder="Buscar voluntário…" />
                 <Select
+                  className="w-auto min-w-[160px]"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as CadastroStatus | '')}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+                {multiTenant && (
+                  <Select
+                    className="w-auto min-w-[180px]"
+                    value={tenantFilter}
+                    onChange={(e) => setTenantFilter(e.target.value)}
+                  >
+                    <option value="">Todos os tenants</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nome}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                <Select
                   className="w-auto min-w-[180px]"
                   value={especFilter}
                   onChange={(e) => setEspecFilter(e.target.value)}
@@ -220,6 +267,20 @@ export function VoluntariosView() {
         usuario={detalhe}
         especNome={detalhe?.especId ? especNomeById[detalhe.especId] : undefined}
         onClose={() => setDetalhe(null)}
+        aprovando={aprovar.isPending}
+        onAprovar={canManage ? (u) => {
+          aprovar.mutate(u.id, {
+            onSuccess: () => {
+              toast.success('Voluntário aprovado.');
+              setDetalhe(null);
+            },
+            onError: (e) => toast.error(apiErrorMessage(e)),
+          });
+        } : undefined}
+        onRejeitar={canManage ? (u) => {
+          setRejeitarTarget(u);
+          setDetalhe(null);
+        } : undefined}
       />
       <RejeitarVoluntarioModal usuario={rejeitarTarget} onClose={() => setRejeitarTarget(null)} />
     </div>

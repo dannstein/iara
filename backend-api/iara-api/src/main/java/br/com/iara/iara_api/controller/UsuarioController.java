@@ -103,8 +103,9 @@ public class UsuarioController {
     @PreAuthorize("hasRole('GESTOR')")
     public List<UsuarioDTO> listar(@RequestParam(required = false) String role,
                                    @RequestParam(required = false) String status,
-                                   @RequestParam(name = "especialidade", required = false) UUID especId) {
-        return service.listar(role, status, especId);
+                                   @RequestParam(name = "especialidade", required = false) UUID especId,
+                                   @RequestParam(name = "semPc", required = false) Boolean semPc) {
+        return service.listar(role, status, especId, semPc);
     }
 
     @PostMapping

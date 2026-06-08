@@ -1162,54 +1162,193 @@ Quando `EventoService.criar()` registra um novo evento (status inicial `SOLICITA
 
 | Método | Caminho | Acesso | Body | Resposta |
 |--------|---------|--------|------|----------|
-| POST | `/pontos-coleta` | COORDENADOR | `{ "pcNome","pcTipo?","coordenadas":{lat,lng},"pcDesc?","pcContato?" }` | PcDTO 201 (coordenador = usuário logado) |
-| GET | `/pontos-coleta?is_active=&pc_is_verified=&pc_tipo=` | 👤 | filtros | PcDTO[] |
+| POST | `/pontos-coleta` | COORDENADOR / GESTOR / ADMIN | `{ "pcNome","pcTipo?","coordenadas":{lat,lng}?,"pcDesc?","pcContato?","idCoordenador?","endereco?" }` | PcDTO 201. Self-create: omite idCoordenador (vira `currentUser`), PC nasce **PENDENTE_VERIFICACAO_GESTOR + isActive=false**. Gestor: pode passar `idCoordenador` (com `endereco`), PC nasce VERIFICADO + ativo. Promove coordenador se rank < COORDENADOR. **409 se coordenador já tem PC ativo (constraint 1:1)** |
+| GET | `/pontos-coleta?is_active=&pc_is_verified=&pc_tipo=&status_verificacao=` | 👤 | filtros. `status_verificacao` ∈ `PENDENTE_VERIFICACAO_GESTOR\|VERIFICADO\|REJEITADO` | PcDTO[] |
 | GET | `/pontos-coleta/proximos?lat=&lng=&raio_metros=` | 👤 | (raio padrão 5000) | PcDTO[] (ordenado por distância) |
 | GET | `/pontos-coleta/{id}` | 👤 | — | PcDTO |
 | PUT | `/pontos-coleta/{id}` | COORDENADOR | `{ "pcNome?","pcDesc?","pcContato?" }` | PcDTO |
-| PATCH | `/pontos-coleta/{id}/verificar` | GESTOR | — | PcDTO |
+| PATCH | `/pontos-coleta/{id}/verificar` | GESTOR | `{ "rejeitar?":bool, "motivo?":string }` (body opcional; sem body = aprovar). Rejeitar exige `motivo`. | PcDTO. Aprovar → `statusVerificacao=VERIFICADO + isActive=true + pcIsVerified=true`. Rejeitar → `statusVerificacao=REJEITADO + motivoRejeicao=<...> + isActive=false` |
 | PATCH | `/pontos-coleta/{id}/coordenador` | GESTOR | `{ "idUsuario" }` | PcDTO (define o coordenador do PC; promove o usuário a COORDENADOR se estiver abaixo desse nível — perfis superiores são preservados; 403 se o usuário estiver fora do escopo) |
 | PATCH | `/pontos-coleta/{id}/desativar` | COORDENADOR | — | PcDTO |
 
-**PcDTO:** `{ id, tenantId, coordenadorId, pcNome, pcTipo, coordenadas, pcDesc, pcContato, pcIsVerified, isActive }`
+**PcDTO:** `{ id, tenantId, coordenadorId, enderecoId, pcNome, pcTipo, coordenadas, pcDesc, pcContato, pcIsVerified, isActive, statusVerificacao, motivoRejeicao }`
 
-### 8.1 Vínculo PC ↔ Evento
-| Método | Caminho | Acesso | Resposta |
-|--------|---------|--------|----------|
-| GET | `/pontos-coleta/{id}/eventos` | COORDENADOR | PcEventoDTO[] |
-| PATCH | `/pontos-coleta/{id}/eventos/{eventoId}/aceitar` | COORDENADOR | PcEventoDTO (libera criar demandas) |
-| PATCH | `/pontos-coleta/{id}/eventos/{eventoId}/recusar` | COORDENADOR | PcEventoDTO |
+### 8.0 Cadastro do coordenador com endereço (Fase 4A)
 
-**PcEventoDTO:** `{ id, pcId, eventoId, status, dataNotificacao, dataResposta }`
+Coordenadores cadastram-se com endereço estruturado, e o PC é criado na **mesma transação** com status `PENDENTE_VERIFICACAO_GESTOR` (V16).
 
-### 8.2 Demandas
 | Método | Caminho | Acesso | Body | Resposta |
 |--------|---------|--------|------|----------|
-| POST | `/pontos-coleta/{id}/demandas` | COORDENADOR | `{ "idEvento","idTipo","prioridade?","qtdSolicitada","descricao?" }` | DemandaDTO 201. **Pré-condição:** vínculo PC↔evento ACEITO, senão 409 |
-| GET | `/pontos-coleta/{id}/demandas?is_active=&prioridade=&id_evento=` | 👤 | filtros | DemandaDTO[] |
-| PUT | `/pontos-coleta/{id}/demandas/{demandaId}` | COORDENADOR | `{ "prioridade?","qtdSolicitada?","descricao?" }` | DemandaDTO |
-| PATCH | `/pontos-coleta/{id}/demandas/{demandaId}/desativar` | COORDENADOR | — | DemandaDTO |
-| GET | `/eventos/{id}/mural` | 👤 | — | DemandaDTO[] (demandas não atendidas do evento, por prioridade) |
+| POST | `/usuarios/cadastro/coordenador` | 🔓 | `{ "nome","email","telefone?","documento","senha","tenantId","pcNome","endereco":{cep?,logradouro?,numero?,complemento?,bairro?,cidade?,uf?,coordenadas:{lat,lng}} }` | TokenResponse 201. **422 se `endereco` ou `pcNome` ausentes.** |
 
-**DemandaDTO:** `{ id, pcId, eventoId, idTipo, tipoNome, prioridade, qtdSolicitada, qtdAtendida, descricao, isActive }`
+Filtro extra em `/usuarios` para o gestor escolher coordenador na criação manual de PC:
 
-### 8.3 Estoque
 | Método | Caminho | Acesso | Resposta |
 |--------|---------|--------|----------|
-| GET | `/pontos-coleta/{id}/estoque` | 👤 | EstoqueDTO[] `{ id, idTipo, tipoNome, quantidade }` |
-| PATCH | `/pontos-coleta/{id}/estoque/{tipoId}?quantidade=N` | COORDENADOR | EstoqueDTO |
+| GET | `/usuarios?role=COORDENADOR&semPc=true` | GESTOR | UsuarioDTO[] — só coordenadores **sem PC ativo** (válidos para vincular a um PC novo) |
 
-### 8.4 Helpers
+**Schema (V16):**
+- `iara_pc.status_verificacao` (VARCHAR, default `VERIFICADO`) + check constraint nos 3 valores.
+- `iara_pc.motivo_rejeicao` (TEXT).
+- Índice parcial único `uq_pc_coordenador_ativo (id_coordenador) WHERE is_active=true` — garante **1 coordenador ↔ 1 PC ativo**.
+- Backfill: dados legados com >1 PC ativo por coordenador → mais antigos viram `is_active=false`.
+
+### 8.1 Vínculo PC ↔ Evento (lifecycle 4B)
+| Método | Caminho | Acesso | Body | Resposta |
+|--------|---------|--------|------|----------|
+| GET | `/pontos-coleta/{id}/eventos` | COORDENADOR | — | PcEventoDTO[] |
+| PATCH | `/pontos-coleta/{id}/eventos/{eventoId}/aceitar` | COORDENADOR | — | PcEventoDTO (ACEITO). **Fan-out síncrono:** cria `WorkerEventoDisponibilidade(PENDENTE)` para cada `Helper` confirmado/ativo do PC. 422 se status atual ≠ NOTIFICADO. |
+| PATCH | `/pontos-coleta/{id}/eventos/{eventoId}/recusar` | COORDENADOR | `{ "idMotivoRecusa","descricao?" }` (obrigatório) | PcEventoDTO (RECUSADO). 400 se `idMotivoRecusa` ausente; 422 se motivo exige descrição e ela falta. |
+| GET | `/pontos-coleta/motivos-recusa` | 👤 | — | MotivoRecusaDTO[] (catálogo seedado em V17) |
+| GET | `/pontos-coleta/{id}/eventos/{eventoId}/workforce` | COORDENADOR/GESTOR/ADMIN | — | WorkerDisponibilidadeDTO[] (workers solicitados + status) |
+
+**PcEventoDTO:** `{ id, pcId, eventoId, status, dataNotificacao, dataResposta, idMotivoRecusa?, motivoRecusaDescricao? }`
+**MotivoRecusaDTO:** `{ id, codigo, label, exigeDescricao }` — códigos: `SEM_PESSOAL, SEM_ESPACO, EM_MANUTENCAO, FORA_HORARIO, FERIADO, INFRAESTRUTURA_AFETADA, FORA_AREA_ATUACAO, OUTRO`
+
+#### 8.1.1 Fila do worker (disponibilidade per-evento)
+Worker = qualquer usuário com `Helper(status=CONFIRMADO, isActive=true)` vinculado ao PC. O `@PreAuthorize('TECNICO')` dos endpoints de helper foi relaxado em 4B — a ownership do helper é validada no service.
+
+| Método | Caminho | Acesso | Body | Resposta |
+|--------|---------|--------|------|----------|
+| GET | `/worker/evento-disponibilidade?status=` | qualquer auth | — | WorkerDisponibilidadeDTO[] (padrão `PENDENTE`) |
+| PATCH | `/worker/evento-disponibilidade/{id}/confirmar` | qualquer auth (dono) | — | DTO atualizada → CONFIRMADA |
+| PATCH | `/worker/evento-disponibilidade/{id}/recusar` | qualquer auth (dono) | `{ "idMotivoRecusa?","descricao?" }` opcional | DTO → RECUSADA |
+
+**WorkerDisponibilidadeDTO:** `{ id, pcEventoId, pcId, eventoId, usuarioId, usuarioNome, status, idMotivoRecusa?, motivoCodigo?, motivoLabel?, motivoDescricao?, dataSolicitacao, dataResposta? }`
+
+#### 8.1.2 Schema (V17)
+- `iara_pc_motivo_recusa` (id, codigo unique, label, exige_descricao, ativo, created_at) + seed.
+- `iara_pc_evento` ganha `id_motivo_recusa`, `motivo_recusa_descricao`, `version` (@Version JPA).
+- `iara_worker_evento_disponibilidade` (id, id_pc_evento ON DELETE CASCADE, id_usuario, status CHECK, id_motivo_recusa, motivo_descricao, data_solicitacao, data_resposta, version, UNIQUE(id_pc_evento, id_usuario)). Índices em (usuario,status) e (pc_evento,status).
+
+### 8.2 Demandas (lifecycle 4C)
+
+Acesso: coordenador **OU** worker confirmado (Helper.status=CONFIRMADO + isActive=true) do PC. O @PreAuthorize foi relaxado em 4C; a regra real é `DemandaService.exigirCoordOuWorker(pc)`. Gestor que não é coordenador do PC → 403.
+
+| Método | Caminho | Body | Resposta |
+|--------|---------|------|----------|
+| POST | `/pontos-coleta/{id}/demandas` | `{ "idEvento","idTipo","prioridade?","qtdSolicitada","descricao?","qtdMaximaCapacidade?" }` | DemandaDTO 201. **Pré-condição:** PcEvento ACEITO (senão 409). Aplica capacidade default de PcCapacidade quando `qtdMaximaCapacidade` ausente; 422 se `qtdSolicitada > capacidade`. |
+| GET | `/pontos-coleta/{id}/demandas?is_active=&prioridade=&id_evento=` | — | DemandaDTO[] |
+| PUT | `/pontos-coleta/{id}/demandas/{demandaId}` | `{ "prioridade?","qtdSolicitada?","descricao?" }` | DemandaDTO. Mudar `qtdSolicitada` recalcula status automaticamente. |
+| PATCH | `/pontos-coleta/{id}/demandas/{demandaId}/fechar` | — | DemandaDTO (status=CLOSED, isActive=false, dataFechamento, fechadoPor). 422 se já fechada. |
+| PATCH | `/pontos-coleta/{id}/demandas/{demandaId}/desativar` | — | Alias de `fechar` (compat legada) |
+| GET | `/eventos/{id}/mural` | — | DemandaDTO[] (demandas não atendidas do evento, por prioridade) |
+
+**DemandaDTO** (estendido em 4C): `{ id, pcId, eventoId, idTipo, tipoNome, prioridade, qtdSolicitada, qtdAtendida, descricao, isActive, status, qtdRecebida, qtdIntencionada, qtdMaximaCapacidade?, dataFechamento?, idUsuFechou? }`
+
+**Status (`PcDemanda.status`)**: `OPEN` → `PARTIALLY_FULFILLED` → `FULFILLED` (transições automáticas em 4D quando `qtdRecebida` muda) | `CLOSED` (manual via fechar). FULFILLED e CLOSED são terminais e setam `isActive=false`.
+
+### 8.2.1 Capacidade default por (PC, tipo)
+
+Tabela `iara_pc_capacidade` armazena o limite default usado quando uma demanda nova não informa `qtdMaximaCapacidade` explicitamente. Linha ausente = sem limite.
+
+| Método | Caminho | Body | Resposta |
+|--------|---------|------|----------|
+| GET | `/pontos-coleta/{pcId}/capacidades` | — | CapacidadeDTO[] |
+| PUT | `/pontos-coleta/{pcId}/capacidades/{tipoId}` | `{ "qtdMaxima": >0 }` | CapacidadeDTO (upsert; coord ou worker). 403 se nem coord nem worker. |
+
+**CapacidadeDTO:** `{ pcId, idTipo, tipoNome, qtdMaxima, alteradoPor, updatedAt }`
+
+#### 8.2.2 Schema (V18)
+- `iara_pc_demanda`: ganha `status` (CHECK 4 valores), `qtd_recebida`, `qtd_intencionada`, `qtd_maxima_capacidade`, `data_fechamento`, `id_usu_fechou`, `version` (@Version). Backfill: existentes vão a OPEN/PARTIALLY_FULFILLED/FULFILLED com base em `qtd_atendida` vs `qtd_solicitada`.
+- `iara_pc_capacidade` (id_pc, id_tipo PK composta) com `qtd_maxima`, `version`.
+- `iara_pc_estoque`: ganha `version`.
+
+### 8.3 Estoque + Inventário (4D)
+
+Acesso: coordenador OU worker confirmado do PC. Toda mutação cria linha em `iara_inventory_transaction` (append-only, RULES bloqueiam UPDATE/DELETE).
+
+| Método | Caminho | Body | Resposta |
+|--------|---------|------|----------|
+| GET | `/pontos-coleta/{id}/estoque` | — | EstoqueDTO[] `{ id, idTipo, tipoNome, quantidade }` |
+| PATCH | `/pontos-coleta/{id}/estoque/{tipoId}?quantidade=N` | — | EstoqueDTO (set absoluto — legado) |
+| POST | `/pontos-coleta/{id}/estoque/distribuir` | `{ "idTipo","quantidade":>0,"observacao?" }` | 204. Falha se estoque insuficiente. Cria DISTRIBUTED. |
+| POST | `/pontos-coleta/{id}/estoque/ajustar` | `{ "idTipo","delta":!=0,"observacao?" }` | 204. Falha se levar a negativo. Cria ADJUSTED. |
+| GET | `/pontos-coleta/{id}/inventario/transacoes?id_evento=` | — | InventoryTransactionDTO[] |
+
+**InventoryTransactionDTO:** `{ id, pcId, eventoId?, idTipo, operacao, quantidade, usuarioId, intencaoId?, demandaId?, observacao?, createdAt }`.
+
+**Operações:** `INTENT_CREATED`, `INTENT_CANCELLED`, `INTENT_EXPIRED`, `RECEIVED`, `DISTRIBUTED`, `ADJUSTED`, `RESET_END_EVENT`.
+
+### 8.3.1 Intenções de doação (lifecycle 4D)
+
+Reserva **soft** com expiração em 48h. Doador pode dar várias intenções até a soma `qtdRecebida + qtdIntencionada` chegar a `qtdSolicitada`. Quando recebida (parcialmente OK), libera o reservado, credita o recebido, atualiza estoque e status da demanda automaticamente.
+
+| Método | Caminho | Body | Resposta |
+|--------|---------|------|----------|
+| POST | `/doacoes` | `{ "idPc","idDemanda","idTipo","quantidade","descricao?","dataPrevista?" }` | DoacaoDTO 201. 422 se demanda não OPEN/PARTIALLY_FULFILLED ou se excede disponibilidade. Cria INTENT_CREATED, seta `dataExpiracao=now+48h`. |
+| GET | `/doacoes/minhas` | — | DoacaoDTO[] |
+| PATCH | `/doacoes/{id}/cancelar` | — | DoacaoDTO. Dono OU coordenador do PC. Cria INTENT_CANCELLED. |
+| GET | `/pontos-coleta/{pcId}/doacoes` | — | DoacaoDTO[] (PENDENTE no PC) |
+| PATCH | `/doacoes/{id}/receber` | `{ "qtdRecebida": 1..quantidade }` | DoacaoDTO. Status → CONFIRMADA. Libera reserva, credita demanda + estoque. Cria RECEIVED. |
+
+**DoacaoDTO** (estendido em 4D): `{ id, usuarioId, pcId, demandaId, idTipo, quantidade, descricao, status, pdrReferencia, dataPrevista, dataConfirmacao, qtdRecebida, dataExpiracao }`.
+
+**Status:** `PENDENTE | CONFIRMADA | CANCELADA | EXPIRADA`.
+
+### 8.3.2 Job de expiração + listener de encerramento
+
+- `DoacaoService.expirarIntencoes` (`@Scheduled(fixedDelay=PT5M)`) marca PENDENTE com `dataExpiracao < now` como EXPIRADA, libera `qtdIntencionada`, cria INTENT_EXPIRED.
+- `DoacaoService.onEventoEncerrado` (`@EventListener` para `EventoEncerradoEvent`) fecha demandas pendentes do evento → CLOSED + isActive=false, zera estoque do PC (por tipo das demandas), cria RESET_END_EVENT para cada tipo com saldo.
+
+### 8.3.3 Schema (V19)
+- `iara_doacao_intencao`: `qtd_recebida`, `data_expiracao`, `version`, CHECK status estendido com EXPIRADA, índice em `data_expiracao` WHERE status='PENDENTE'.
+- `iara_inventory_transaction` (id, id_pc, id_evento, id_tipo, operacao CHECK, quantidade, id_usuario, id_intencao, id_demanda, observacao, created_at). **RULES `iara_inv_no_update` / `iara_inv_no_delete`** garantem imutabilidade.
+
+### 8.4 Helpers (workers do PC)
+
+Em 4B o `@PreAuthorize('TECNICO')` foi relaxado: helper invitee pode confirmar/recusar independente de role; a ownership do helper é validada no service.
+
 | Método | Caminho | Acesso | Resposta |
 |--------|---------|--------|----------|
 | POST | `/pontos-coleta/{id}/helpers/convidar?idUsuario=` | COORDENADOR | HelperDTO 201 |
-| POST | `/pontos-coleta/{id}/helpers/solicitar` | TECNICO | HelperDTO 201 |
+| POST | `/pontos-coleta/{id}/helpers/solicitar` | qualquer auth | HelperDTO 201 |
 | GET | `/pontos-coleta/{id}/helpers?status=` | COORDENADOR | HelperDTO[] |
-| PATCH | `/pontos-coleta/{id}/helpers/{helperId}/confirmar` | TECNICO | HelperDTO |
-| PATCH | `/pontos-coleta/{id}/helpers/{helperId}/recusar` | TECNICO | HelperDTO |
+| PATCH | `/pontos-coleta/{id}/helpers/{helperId}/confirmar` | qualquer auth (dono) | HelperDTO |
+| PATCH | `/pontos-coleta/{id}/helpers/{helperId}/recusar` | qualquer auth (dono) | HelperDTO |
 | PATCH | `/pontos-coleta/{id}/helpers/{helperId}/encerrar` | COORDENADOR | HelperDTO |
 
 **HelperDTO:** `{ id, usuarioId, pcId, iniciadoPor, status, isActive }`
+
+### 8.5 Transactional Outbox Pattern (Fase 4E)
+
+Todos os 8 eventos de domínio novos do PC passam pelo padrão Outbox — atomicidade DB+evento + retry + dedupe pelos consumers.
+
+| Componente | Localização | Função |
+|------------|-------------|--------|
+| `iara_outbox_event` (V20) | tabela | (id, event_type, aggregate_id, aggregate_type, payload jsonb, routing_key, message_id UUID UNIQUE, status, attempts, next_attempt_at, last_error, created_at, published_at). Status: `PENDING` → `PUBLISHED` ou `PERMANENTLY_FAILED`. |
+| `OutboxPublisher.publish(...)` | service | `Propagation.MANDATORY` — insere na mesma transação do caller. |
+| `OutboxPollerJob` | `@Scheduled(fixedDelay=PT5S, initialDelay=PT15S)` | `FOR UPDATE SKIP LOCKED LIMIT 50`. Publica em `iara.events` com header `message_id`. Backoff exponencial: 5s, 30s, 2min, 10min, 1h, 6h. Após 6 tentativas → PERMANENTLY_FAILED. |
+| `iara_processed_message` (V20) | tabela | PK composta `(message_id, consumer)`. |
+| `IdempotencyService.markIfFirst(msgId, consumer)` | service | `REQUIRES_NEW`. Retorna `true` na primeira passada; `false` em reentregas. |
+| `ProcessedMessageCleanupJob` | `@Scheduled(cron=4am)` | Apaga marcas > 24h. |
+
+#### 8.5.1 Eventos publicados via outbox
+
+| Evento | Routing key | Quando | Aggregate |
+|--------|-------------|--------|-----------|
+| `PcEventoAceito` | `pc.evento.aceito` | coord aceita evento | PcEvento |
+| `PcEventoRecusado` | `pc.evento.recusado` | coord recusa com motivo | PcEvento |
+| `WorkerDisponibilidadeRespondida` | `pc.worker.respondeu` | worker confirma/recusa per-evento | WorkerEventoDisponibilidade |
+| `SolicitacaoCriada` | `pc.solicitacao.criada` | demanda nova criada | PcDemanda |
+| `SolicitacaoFechada` | `pc.solicitacao.fechada` | demanda manualmente fechada | PcDemanda |
+| `DoacaoIntencaoCriada` | `pc.doacao.intencao` | doador cria intent | DoacaoIntencao |
+| `DoacaoRecebida` | `pc.doacao.recebida` | coord/worker marca recebido | DoacaoIntencao |
+| `EstoqueAlterado` | `pc.estoque.alterado` | distribuir / ajustar | PcEstoque |
+
+#### 8.5.2 Filas RabbitMQ (RabbitConfig)
+
+Exchange existente `iara.events` (TopicExchange) ganhou 5 queues novas + DLQ dedicada:
+
+| Queue | Routing | x-max-priority | DLX |
+|-------|---------|----------------|-----|
+| `iara.pc.lifecycle` | `pc.evento.#` | 5 (campo) | `iara.pc.dlq` |
+| `iara.pc.solicitacao` | `pc.solicitacao.#` | 5 | `iara.pc.dlq` |
+| `iara.pc.worker` | `pc.worker.#` | 3 | `iara.pc.dlq` |
+| `iara.pc.doacao` | `pc.doacao.#` | 3 | `iara.pc.dlq` |
+| `iara.pc.estoque` | `pc.estoque.#` | 2 (admin) | `iara.pc.dlq` |
+
+Priority queues asseguram que field operations (lifecycle / solicitação) sejam processadas antes de operações administrativas (estoque). Consumers ainda não estão implementados — a UI no 4G é o cliente direto via React Query / WebSocket; o outbox + RabbitMQ permitem que consumers externos (analytics, dashboards, etc.) sejam plugados depois sem reabrir o domínio.
 
 ---
 

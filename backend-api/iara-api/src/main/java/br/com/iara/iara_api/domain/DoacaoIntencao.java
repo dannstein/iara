@@ -69,4 +69,17 @@ public class DoacaoIntencao {
     @UpdateTimestamp
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
+
+    // ----- Fase 4D: tracking + expiração + optimistic locking -----
+
+    @Column(name = "qtd_recebida", nullable = false)
+    private int qtdRecebida = 0;
+
+    /** Default now+48h (definido no service). Job expira PENDENTE com data_expiracao < now. */
+    @Column(name = "data_expiracao")
+    private OffsetDateTime dataExpiracao;
+
+    @Version
+    @Column(nullable = false)
+    private int version;
 }

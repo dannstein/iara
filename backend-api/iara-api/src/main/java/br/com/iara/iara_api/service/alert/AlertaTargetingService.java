@@ -206,7 +206,7 @@ public class AlertaTargetingService {
 
         if ("TENANT".equals(escopoTipo)) {
             // Todos os coordenadores ativos do tenant
-            for (Pc pc : pcRepository.filtrar(List.of(tenantId), true, null, null)) {
+            for (Pc pc : pcRepository.filtrar(List.of(tenantId), true, null, null, null)) {
                 if (pc.getCoordenador() != null) result.add(pc.getCoordenador().getId());
             }
             return result;

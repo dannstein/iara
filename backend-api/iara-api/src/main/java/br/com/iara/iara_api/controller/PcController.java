@@ -18,11 +18,12 @@ import java.util.UUID;
 public class PcController {
 
     private final PcService service;
+    private final br.com.iara.iara_api.service.PcEventoLifecycleService lifecycleService;
 
     // ---- 13.1 CRUD ----
 
     @PostMapping
-    @PreAuthorize("hasRole('COORDENADOR')")
+    @PreAuthorize("hasAnyRole('COORDENADOR','GESTOR','ADMIN')")
     public ResponseEntity<PcDTO> criar(@Valid @RequestBody CreatePcRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.criar(req));
     }
@@ -30,8 +31,9 @@ public class PcController {
     @GetMapping
     public List<PcDTO> listar(@RequestParam(name = "is_active", required = false) Boolean isActive,
                               @RequestParam(name = "pc_is_verified", required = false) Boolean isVerified,
-                              @RequestParam(name = "pc_tipo", required = false) String pcTipo) {
-        return service.listar(isActive, isVerified, pcTipo);
+                              @RequestParam(name = "pc_tipo", required = false) String pcTipo,
+                              @RequestParam(name = "status_verificacao", required = false) String statusVerificacao) {
+        return service.listar(isActive, isVerified, pcTipo, statusVerificacao);
     }
 
     @GetMapping("/proximos")
@@ -53,8 +55,9 @@ public class PcController {
 
     @PatchMapping("/{id}/verificar")
     @PreAuthorize("hasRole('GESTOR')")
-    public PcDTO verificar(@PathVariable UUID id) {
-        return service.verificar(id);
+    public PcDTO verificar(@PathVariable UUID id,
+                           @Valid @RequestBody(required = false) VerificarPcRequest req) {
+        return service.verificar(id, req);
     }
 
     @PatchMapping("/{id}/coordenador")
@@ -81,13 +84,28 @@ public class PcController {
     @PatchMapping("/{id}/eventos/{eventoId}/aceitar")
     @PreAuthorize("hasRole('COORDENADOR')")
     public PcEventoDTO aceitar(@PathVariable UUID id, @PathVariable UUID eventoId) {
-        return service.responderEvento(id, eventoId, true);
+        // Sub-fase 4B: aceita + faz fan-out de disponibilidade pros workers.
+        return lifecycleService.aceitar(id, eventoId);
     }
 
     @PatchMapping("/{id}/eventos/{eventoId}/recusar")
     @PreAuthorize("hasRole('COORDENADOR')")
-    public PcEventoDTO recusar(@PathVariable UUID id, @PathVariable UUID eventoId) {
-        return service.responderEvento(id, eventoId, false);
+    public PcEventoDTO recusar(@PathVariable UUID id, @PathVariable UUID eventoId,
+                               @Valid @RequestBody RecusarPcEventoRequest req) {
+        return lifecycleService.recusar(id, eventoId, req);
+    }
+
+    /** Catálogo público (autenticado) de motivos para uso na UI. */
+    @GetMapping("/motivos-recusa")
+    public List<MotivoRecusaDTO> motivosRecusa() {
+        return lifecycleService.listarMotivos();
+    }
+
+    /** Workforce (workers + status) de um PC para um evento — visão do coordenador. */
+    @GetMapping("/{id}/eventos/{eventoId}/workforce")
+    @PreAuthorize("hasAnyRole('COORDENADOR','GESTOR','ADMIN')")
+    public List<WorkerDisponibilidadeDTO> workforce(@PathVariable UUID id, @PathVariable UUID eventoId) {
+        return lifecycleService.workforce(id, eventoId);
     }
 
     // ---- 13.4 estoque ----
@@ -112,8 +130,8 @@ public class PcController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.convidar(id, idUsuario));
     }
 
+    // Fase 4B — worker = qualquer role (a regra real está na ownership do helper).
     @PostMapping("/{id}/helpers/solicitar")
-    @PreAuthorize("hasRole('TECNICO')")
     public ResponseEntity<HelperDTO> solicitar(@PathVariable UUID id) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.solicitar(id));
     }
@@ -125,13 +143,11 @@ public class PcController {
     }
 
     @PatchMapping("/{id}/helpers/{helperId}/confirmar")
-    @PreAuthorize("hasRole('TECNICO')")
     public HelperDTO confirmarHelper(@PathVariable UUID id, @PathVariable UUID helperId) {
         return service.confirmarHelper(id, helperId);
     }
 
     @PatchMapping("/{id}/helpers/{helperId}/recusar")
-    @PreAuthorize("hasRole('TECNICO')")
     public HelperDTO recusarHelper(@PathVariable UUID id, @PathVariable UUID helperId) {
         return service.recusarHelper(id, helperId);
     }
