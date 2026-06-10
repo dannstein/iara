@@ -161,6 +161,11 @@ public class PcEventoLifecycleService {
                         "usuarioId", d.getUsuario().getId().toString(),
                         "status", "CONFIRMADA"
                 ));
+        audit.log(d.getPcEvento().getPc().getId(),
+                d.getPcEvento().getEvento().getId(),
+                d.getUsuario().getId(),
+                PcAuditService.WORKER_CONFIRMED,
+                java.util.Map.of("disponibilidadeId", d.getId().toString()));
         return WorkerDisponibilidadeDTO.from(d);
     }
 
@@ -188,6 +193,13 @@ public class PcEventoLifecycleService {
         payloadR.put("motivoCodigo", motivo != null ? motivo.getCodigo() : null);
         outbox.publish("WorkerDisponibilidadeRespondida", "WorkerEventoDisponibilidade",
                 d.getId(), "pc.worker.respondeu", payloadR);
+        audit.log(d.getPcEvento().getPc().getId(),
+                d.getPcEvento().getEvento().getId(),
+                d.getUsuario().getId(),
+                PcAuditService.WORKER_REFUSED,
+                java.util.Map.of(
+                        "disponibilidadeId", d.getId().toString(),
+                        "motivoCodigo", motivo != null ? motivo.getCodigo() : ""));
         d.setMotivoRecusa(motivo);
         d.setMotivoDescricao(req != null ? req.descricao() : null);
         return WorkerDisponibilidadeDTO.from(d);

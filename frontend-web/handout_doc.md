@@ -1350,6 +1350,19 @@ Exchange existente `iara.events` (TopicExchange) ganhou 5 queues novas + DLQ ded
 
 Priority queues asseguram que field operations (lifecycle / solicitação) sejam processadas antes de operações administrativas (estoque). Consumers ainda não estão implementados — a UI no 4G é o cliente direto via React Query / WebSocket; o outbox + RabbitMQ permitem que consumers externos (analytics, dashboards, etc.) sejam plugados depois sem reabrir o domínio.
 
+### 8.6 Histórico imutável do PC (Fase 4F)
+
+Append-only log inline (mesma tx do domínio). RULES `iara_pc_audit_no_update` / `iara_pc_audit_no_delete` em V21 garantem imutabilidade — `UPDATE`/`DELETE` retornam 0 rows mesmo via psql direto.
+
+| Método | Caminho | Acesso | Resposta |
+|--------|---------|--------|----------|
+| GET | `/pontos-coleta/{pcId}/historico?id_evento=&page=&size=` | **coordenador do PC apenas** (403 caso contrário) | `Page<PcAuditLogDTO>` (DESC por createdAt) |
+| GET | `/pontos-coleta/{pcId}/workers/{usuarioId}/atividade?page=&size=` | coord OU worker do PC | `Page<PcAuditLogDTO>` filtrado por ator |
+
+**PcAuditLogDTO:** `{ id, pcId, eventoId?, atorId, acao, payload, createdAt }`
+
+Códigos de ação registrados pelo `PcAuditService`: `PC_AVAILABILITY_ACCEPTED`, `PC_AVAILABILITY_REFUSED`, `WORKER_AVAILABILITY_REQUESTED`, `WORKER_CONFIRMED`, `WORKER_REFUSED`, `DEMAND_CREATED`, `DEMAND_CLOSED`, `DONATION_INTENT_CREATED`, `DONATION_INTENT_CANCELLED`, `DONATION_RECEIVED`, `STOCK_DISTRIBUTED`, `STOCK_ADJUSTED`, `EVENT_INVENTORY_RESET`. Cada serviço de domínio (4B/4C/4D) emite a ação correspondente após persistir.
+
 ---
 
 ## 9. Doações
