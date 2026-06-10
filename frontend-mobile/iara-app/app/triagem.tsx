@@ -71,6 +71,26 @@ export default function Triagem() {
               <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
             </TouchableOpacity>
 
+            {/* Ponto de Coleta */}
+            <TouchableOpacity
+              style={styles.optionCard}
+              onPress={() => router.push('/signup-coordenador' as never)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.optionIcon, { backgroundColor: '#05966918' }]}>
+                <Ionicons name="storefront" size={32} color="#059669" />
+              </View>
+              <View style={styles.optionText}>
+                <Text style={[styles.optionTitle, { color: '#059669' }]}>
+                  Quero ser um Ponto de Coleta!
+                </Text>
+                <Text style={styles.optionDesc}>
+                  Registre seu espaço como ponto de recebimento e distribuição de doações.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+            </TouchableOpacity>
+
           </View>
 
           <TouchableOpacity

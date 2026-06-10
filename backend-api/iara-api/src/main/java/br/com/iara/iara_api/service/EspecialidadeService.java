@@ -9,6 +9,7 @@ import br.com.iara.iara_api.exception.NotFoundException;
 import br.com.iara.iara_api.repository.EspecCategoriaRepository;
 import br.com.iara.iara_api.repository.EspecRepository;
 import br.com.iara.iara_api.security.CurrentUser;
+import br.com.iara.iara_api.security.TenantScope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public class EspecialidadeService {
     private final EspecCategoriaRepository categoriaRepository;
     private final EspecRepository especRepository;
     private final CurrentUser currentUser;
+    private final TenantScope tenantScope;
 
     @Transactional(readOnly = true)
     public List<CategoriaDTO> listarCategorias() {
@@ -58,7 +60,7 @@ public class EspecialidadeService {
         EspecCategoria c = new EspecCategoria();
         c.setCatNome(req.nome());
         c.setCatDesc(req.descricao());
-        c.setTenant(u.getTenant());
+        c.setTenant(tenantScope.effectiveTenant(u));
         return CategoriaDTO.from(categoriaRepository.save(c), List.of());
     }
 
@@ -84,7 +86,7 @@ public class EspecialidadeService {
         e.setCategoria(categoria);
         e.setEspecNome(req.nome());
         e.setEspecDesc(req.descricao());
-        e.setTenant(u.getTenant());
+        e.setTenant(tenantScope.effectiveTenant(u));
         return EspecDTO.from(especRepository.save(e));
     }
 }

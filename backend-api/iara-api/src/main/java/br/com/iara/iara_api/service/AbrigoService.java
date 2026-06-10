@@ -39,7 +39,7 @@ public class AbrigoService {
     public AbrigoDTO criar(AbrigoRequest req) {
         Usuario u = currentUser.require();
         Abrigo a = new Abrigo();
-        a.setTenant(u.getTenant());
+        a.setTenant(tenantScope.effectiveTenant(u));
         a.setNome(req.nome());
         a.setDescricao(req.descricao());
         a.setCoordenadas(GeoUtil.point(req.coordenadas()));

@@ -7,8 +7,10 @@ import { AlertaProvider } from '../context/AlertaContext';
 import { AlertaGlowOverlay } from '../components/AlertaGlowOverlay';
 import { AlertaPopup } from '../components/AlertaPopup';
 import { AlertaFloatingBubble } from '../components/AlertaFloatingBubble';
+import { EventoInviteOverlay } from '../components/EventoInviteOverlay';
 import { OfflineSnackbar } from '../components/OfflineSnackbar';
 import { setOffline } from '../lib/offlineState';
+import { loadSeenEventoIds } from '../lib/inviteState';
 import { Colors } from '../constants/theme';
 
 // TODO: notificações nativas — reativar quando o sistema de push estiver pronto.
@@ -65,6 +67,8 @@ function NotificationSetup() {
 
 function NetworkMonitor() {
   useEffect(() => {
+    loadSeenEventoIds();
+
     Network.getNetworkStateAsync().then(({ isConnected }) => {
       setOffline(isConnected === false);
     });
@@ -122,6 +126,7 @@ export default function RootLayout() {
               <Stack.Screen name="triagem" />
               <Stack.Screen name="signup-doador" />
               <Stack.Screen name="signup-voluntario" />
+              <Stack.Screen name="signup-coordenador" />
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="mapa-fullscreen" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
               {/* Sub-telas de Locais */}
@@ -146,6 +151,7 @@ export default function RootLayout() {
             <AlertaGlowOverlay />
             <AlertaPopup />
             <AlertaFloatingBubble />
+            <EventoInviteOverlay />
             <OfflineSnackbar />
           </View>
         </AuthGate>

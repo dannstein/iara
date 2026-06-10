@@ -178,7 +178,7 @@ public class DemandaService {
      * Os endpoints relaxaram @PreAuthorize para auth qualquer; este método é a
      * última linha de defesa.
      */
-    void exigirCoordOuWorker(Pc pc) {
+    public void exigirCoordOuWorker(Pc pc) {
         Usuario u = currentUser.require();
         if (pc.getCoordenador().getId().equals(u.getId())) return;
         boolean isWorker = helperRepository.listarPorPc(pc.getId(), "CONFIRMADO").stream()

@@ -31,6 +31,27 @@ public interface AlertaRepository extends JpaRepository<Alerta, UUID> {
                          @Param("idEvento") UUID idEvento,
                          @Param("idZonaRisco") UUID idZonaRisco);
 
+    /** Retorna apenas alertas nos quais o usuário é destinatário (mobile / apps de campo). */
+    @Query("""
+            select a from Alerta a
+            where exists (
+                select ad from AlertaDestinatario ad
+                where ad.alerta.id = a.id and ad.usuario.id = :userId
+            )
+              and (:status is null or a.status = :status)
+              and (:severidade is null or a.severidade = :severidade)
+              and (:categoria is null or a.categoria = :categoria)
+              and (:idEvento is null or a.evento.id = :idEvento)
+              and (:idZonaRisco is null or a.zonaRisco.id = :idZonaRisco)
+            order by a.createdAt desc
+            """)
+    List<Alerta> filtrarParaDestinatario(@Param("userId") UUID userId,
+                                         @Param("status") String status,
+                                         @Param("severidade") String severidade,
+                                         @Param("categoria") String categoria,
+                                         @Param("idEvento") UUID idEvento,
+                                         @Param("idZonaRisco") UUID idZonaRisco);
+
     /** Geofencing (query 3 do DDL): alertas cuja área contém a coordenada. */
     @Query(value = """
             select * from iara_alerta a

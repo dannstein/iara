@@ -21,14 +21,14 @@ public class CheckinController {
     private final CheckinService service;
 
     @PostMapping("/checkin")
-    @PreAuthorize("hasRole('TECNICO')")
+    @PreAuthorize("hasAnyRole('TECNICO', 'MONITOR')")
     public ResponseEntity<CheckinDTO> checkin(@PathVariable UUID eventoId,
                                               @Valid @RequestBody CheckinRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.checkin(eventoId, req));
     }
 
     @PatchMapping("/checkout")
-    @PreAuthorize("hasRole('TECNICO')")
+    @PreAuthorize("hasAnyRole('TECNICO', 'MONITOR')")
     public CheckinDTO checkout(@PathVariable UUID eventoId) {
         return service.checkout(eventoId);
     }

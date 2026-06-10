@@ -6,8 +6,13 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { api } from '../services/api';
+import { api, WS_URL } from '../services/api';
 import { useAuth } from './AuthContext';
+import {
+  connectAlertaSocket,
+  disconnectAlertaSocket,
+  AlertaSocketPayload,
+} from '../lib/alertaSocket';
 // TODO: notificações nativas — descomentar quando push estiver reativado em lib/notifications.ts
 // import { scheduleAlertNotification } from '../lib/notifications';
 
@@ -25,6 +30,7 @@ export type AlertaCategoria =
 
 export interface AlertaDTO {
   id: string;
+  idEvento?: string;
   titulo: string | null;
   mensagem: string;
   severidade: AlertaSeveridade;
@@ -99,6 +105,7 @@ interface AlertaContextValue {
   notificationCount: number;
   isLoading: boolean;
   dismissPopup: () => void;
+  dismissAndClearFloating: () => void;
   showAlertPopup: (alerta: AlertaDTO) => void;
   clearFloating: () => void;
   refresh: () => void;
@@ -111,6 +118,7 @@ const AlertaContext = createContext<AlertaContextValue>({
   notificationCount: 0,
   isLoading: false,
   dismissPopup: () => {},
+  dismissAndClearFloating: () => {},
   showAlertPopup: () => {},
   clearFloating: () => {},
   refresh: () => {},
@@ -132,6 +140,8 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
 
   // IDs que já foram exibidos no popup nesta sessão
   const seenIds = useRef<Set<string>>(new Set());
+  // IDs cujo balão flutuante foi dispensado pelo usuário nesta sessão
+  const dismissedFloatingIds = useRef<Set<string>>(new Set());
   // Fila de alertas novos esperando para mostrar popup
   const popupQueue = useRef<AlertaDTO[]>([]);
 
@@ -147,7 +157,8 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
 
       // Detecta alertas novos que precisam de popup
       const novos = data.filter(
-        (a) => POPUP_SEVERIDADES.has(a.severidade) && !seenIds.current.has(a.id),
+        (a) => POPUP_SEVERIDADES.has(a.severidade)
+          && !seenIds.current.has(a.id),
       );
 
       if (novos.length > 0) {
@@ -163,8 +174,10 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
         setPendingPopup((curr) => curr ?? popupQueue.current.shift() ?? null);
       }
 
-      // Floating: o alerta ativo mais grave com severidade ≥ WARNING
-      const topFloat = data.find((a) => POPUP_SEVERIDADES.has(a.severidade));
+      // Floating: o alerta ativo mais grave com severidade ≥ WARNING (exceto dispensados)
+      const topFloat = data.find(
+        (a) => POPUP_SEVERIDADES.has(a.severidade) && !dismissedFloatingIds.current.has(a.id),
+      );
       setFloatingAlert((curr) => {
         // Mantém o atual se ainda está na lista; senão atualiza
         if (curr && data.some((a) => a.id === curr.id)) return curr;
@@ -177,13 +190,60 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
     }
   }, [accessToken]);
 
-  // Polling a cada 30 s
+  const handleSocketMessage = useCallback(async (payload: AlertaSocketPayload) => {
+    if (payload.type === 'ALERT_NEW') {
+      try {
+        const res = await api.get<AlertaDTO>(`/alertas/${payload.id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const alerta = res.data;
+        setAlertas((prev) => {
+          const filtered = prev.filter((a) => a.id !== alerta.id);
+          return [...filtered, alerta].sort(sortBySeveridade);
+        });
+        const isNew =
+          POPUP_SEVERIDADES.has(alerta.severidade) &&
+          !seenIds.current.has(alerta.id);
+        if (isNew) {
+          popupQueue.current.push(alerta);
+          setPendingPopup((curr) => curr ?? popupQueue.current.shift() ?? null);
+        }
+        const topFloat = POPUP_SEVERIDADES.has(alerta.severidade) &&
+          !dismissedFloatingIds.current.has(alerta.id) ? alerta : null;
+        if (topFloat) {
+          setFloatingAlert((curr) => {
+            const sev = SEV_ORDER[topFloat.severidade];
+            if (!curr) return topFloat;
+            return sev <= SEV_ORDER[curr.severidade] ? topFloat : curr;
+          });
+        }
+      } catch {}
+    } else if (payload.type === 'ALERT_STATUS_CHANGED') {
+      const terminal = new Set(['RESOLVED', 'CANCELLED', 'EXPIRED', 'SUPERSEDED']);
+      if (payload.status && terminal.has(payload.status)) {
+        setAlertas((prev) => prev.filter((a) => a.id !== payload.id));
+        setFloatingAlert((curr) => (curr?.id === payload.id ? null : curr));
+      } else {
+        try {
+          const res = await api.get<AlertaDTO>(`/alertas/${payload.id}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          setAlertas((prev) => {
+            const filtered = prev.filter((a) => a.id !== res.data.id);
+            return [...filtered, res.data].sort(sortBySeveridade);
+          });
+        } catch {}
+      }
+    }
+  }, [accessToken]);
+
+  // Carrega estado inicial uma vez e conecta WebSocket para receber pushes em tempo real
   useEffect(() => {
     if (!accessToken) return;
     fetchAlertas();
-    const interval = setInterval(fetchAlertas, 30_000);
-    return () => clearInterval(interval);
-  }, [accessToken, fetchAlertas]);
+    connectAlertaSocket(WS_URL, accessToken, handleSocketMessage);
+    return () => disconnectAlertaSocket();
+  }, [accessToken, fetchAlertas, handleSocketMessage]);
 
   function dismissPopup() {
     if (!pendingPopup) return;
@@ -195,6 +255,20 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => {});
 
     // Próximo da fila, se houver
+    const next = popupQueue.current.shift() ?? null;
+    setPendingPopup(next);
+  }
+
+  // Dispensa o popup E remove o balão flutuante para toda a sessão
+  function dismissAndClearFloating() {
+    if (!pendingPopup) return;
+    const id = pendingPopup.id;
+    dismissedFloatingIds.current.add(id);
+    setFloatingAlert((curr) => (curr?.id === id ? null : curr));
+    seenIds.current.add(id);
+    api.patch(`/alertas/${id}/visualizar`, {}, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).catch(() => {});
     const next = popupQueue.current.shift() ?? null;
     setPendingPopup(next);
   }
@@ -217,6 +291,7 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
       notificationCount,
       isLoading,
       dismissPopup,
+      dismissAndClearFloating,
       showAlertPopup,
       clearFloating,
       refresh: fetchAlertas,

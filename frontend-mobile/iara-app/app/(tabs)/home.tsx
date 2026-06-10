@@ -87,7 +87,7 @@ const ZONA_COLOR = (nivel: number) =>
 // ── Tela ─────────────────────────────────────────────────────
 
 export default function Home() {
-  const { role, email, accessToken } = useAuth();
+  const { role, nome, email, accessToken } = useAuth();
   const { notificationCount } = useAlerta();
   const isDoador = DOADOR_ROLES.has(role ?? '');
   const layers   = isDoador ? DOADOR_LAYERS : STAFF_LAYERS;
@@ -199,7 +199,7 @@ export default function Home() {
     [zonas, activeFilters],
   );
 
-  const displayName = email ? email.split('@')[0] : 'usuário';
+  const displayName = nome || (email ? email.split('@')[0] : 'usuário');
   const activeCount = layers.filter((l) => !activeFilters.has(l.key)).length; // ocultos
 
   return (

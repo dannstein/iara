@@ -74,6 +74,19 @@ public class TenantScope {
     }
 
     /**
+     * Tenant efetivo para operações de escrita.
+     * Se X-Active-Tenant está no request e dentro do escopo do usuário, retorna esse tenant.
+     * Caso contrário, retorna o tenant do JWT do usuário.
+     */
+    public Tenant effectiveTenant(Usuario usuario) {
+        UUID active = activeTenantFromRequest();
+        if (active != null && canSee(usuario, active)) {
+            return tenantRepository.findById(active).orElse(usuario.getTenant());
+        }
+        return usuario.getTenant();
+    }
+
+    /**
      * Verifica se {@code candidateAncestorTenantId} é ancestral próprio do tenant atual do usuário.
      * Usado para validar escalonamento de alertas (apenas para cima na hierarquia).
      */

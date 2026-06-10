@@ -100,7 +100,9 @@ public class PcService {
         }
 
         Pc pc = new Pc();
-        pc.setTenant(coordenador.getTenant());
+        pc.setTenant(req.idCoordenador() == null
+                ? tenantScope.effectiveTenant(actor)
+                : coordenador.getTenant());
         pc.setCoordenador(coordenador);
         pc.setEndereco(endereco);
         pc.setPcNome(req.pcNome());
@@ -349,7 +351,7 @@ public class PcService {
 
     // -------------------------------------------------------------- helpers internos
 
-    Pc buscarVisivel(UUID id) {
+    public Pc buscarVisivel(UUID id) {
         Usuario u = currentUser.require();
         Pc pc = pcRepository.findById(id).orElseThrow(() -> new NotFoundException("Ponto de coleta não encontrado"));
         if (!tenantScope.canSee(u, pc.getTenant().getId())) {

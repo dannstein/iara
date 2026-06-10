@@ -8,6 +8,7 @@ import {
   CATEGORIA_LABEL,
   type AlertaSeveridade,
 } from '../context/AlertaContext';
+import { useHasInvite } from '../lib/inviteState';
 
 const SEV_ICON: Record<AlertaSeveridade, string> = {
   EMERGENCY:   'warning',
@@ -20,18 +21,27 @@ const SEV_ICON: Record<AlertaSeveridade, string> = {
 };
 
 export function AlertaPopup() {
-  const { pendingPopup, dismissPopup } = useAlerta();
-  const pathname = usePathname();
+  const { pendingPopup, dismissAndClearFloating } = useAlerta();
+  const pathname  = usePathname();
+  const hasInvite = useHasInvite();
 
   if (!pendingPopup) return null;
+  if (hasInvite) return null;
   const ROTAS_EXCLUIDAS = ['/', '/signup', '/mapa-fullscreen'];
   if (ROTAS_EXCLUIDAS.includes(pathname)) return null;
 
-  const color = SEVERITY_COLOR[pendingPopup.severidade];
-  const icon  = SEV_ICON[pendingPopup.severidade];
-  const label = SEVERITY_LABEL[pendingPopup.severidade];
-  const cat   = CATEGORIA_LABEL[pendingPopup.categoria];
-  const title = pendingPopup.titulo ?? cat;
+  const color      = SEVERITY_COLOR[pendingPopup.severidade];
+  const icon       = SEV_ICON[pendingPopup.severidade];
+  const label      = SEVERITY_LABEL[pendingPopup.severidade];
+  const cat        = CATEGORIA_LABEL[pendingPopup.categoria];
+  const title      = pendingPopup.titulo ?? cat;
+  const isCritical = pendingPopup.severidade === 'CRITICAL' || pendingPopup.severidade === 'EMERGENCY';
+
+  const btnLabel = pendingPopup.requerAck
+    ? 'Confirmar recebimento'
+    : isCritical
+      ? 'OK, entendido'
+      : 'Fechar';
 
   return (
     <Modal
@@ -39,7 +49,7 @@ export function AlertaPopup() {
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={dismissPopup}
+      onRequestClose={dismissAndClearFloating}
     >
       <View style={styles.overlay}>
         <View style={styles.card}>
@@ -51,23 +61,24 @@ export function AlertaPopup() {
 
           {/* Corpo */}
           <View style={styles.cardBody}>
-            {/* Badge categoria */}
             <View style={[styles.catBadge, { backgroundColor: `${color}18`, borderColor: `${color}55` }]}>
               <Text style={[styles.catText, { color }]}>{cat}</Text>
             </View>
-
             <Text style={styles.title} numberOfLines={3}>{title}</Text>
             <Text style={styles.message}>{pendingPopup.mensagem}</Text>
           </View>
 
           {/* Rodapé */}
-          <TouchableOpacity
-            style={[styles.okBtn, { backgroundColor: color }]}
-            onPress={dismissPopup}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.okText}>OK, entendido</Text>
-          </TouchableOpacity>
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: color }]}
+              onPress={dismissAndClearFloating}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={pendingPopup.requerAck ? 'checkmark-circle' : 'checkmark'} size={16} color="#fff" />
+              <Text style={styles.actionText}>{btnLabel}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -133,14 +144,20 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 21,
   },
-  okBtn: {
-    marginHorizontal: 20,
-    marginBottom: 20,
+  footer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    gap: 10,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     borderRadius: 14,
     paddingVertical: 14,
-    alignItems: 'center',
   },
-  okText: {
+  actionText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#fff',

@@ -59,7 +59,7 @@ public class SolicitacaoServicoService {
         }
 
         SolicitacaoServico s = new SolicitacaoServico();
-        s.setTenant(u.getTenant());
+        s.setTenant(tenantScope.effectiveTenant(u));
         s.setUsuario(u);
         s.setTipo(tipo);
         s.setEnderecoTxt(enderecoTxt);

@@ -34,6 +34,8 @@ interface PcDTO {
   pcDesc?: string;
   pcIsVerified: boolean;
   isActive: boolean;
+  statusVerificacao?: string;
+  motivoRejeicao?: string;
   coordenadas: { lat: number; lng: number };
 }
 
@@ -46,13 +48,19 @@ interface EstoqueItem {
 
 interface DemandaDTO {
   id: string;
+  pcId: string;
+  eventoId: string;
   idTipo: string;
   tipoNome: string;
   prioridade: 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAIXA';
   qtdSolicitada: number;
   qtdAtendida: number;
+  qtdRecebida: number;
+  qtdIntencionada: number;
+  qtdMaximaCapacidade?: number;
   descricao?: string;
   isActive: boolean;
+  status?: string;
 }
 
 interface TipoDTO {
@@ -70,12 +78,53 @@ interface PcEventoDTO {
   pcId: string;
   eventoId: string;
   status: string;
+  dataNotificacao?: string;
+  dataResposta?: string;
+}
+
+interface MotivoRecusaDTO {
+  id: string;
+  codigo: string;
+  label: string;
+  descricaoObrigatoria: boolean;
+}
+
+interface DoacaoDTO {
+  id: string;
+  usuarioId: string;
+  pcId: string;
+  demandaId: string;
+  idTipo: string;
+  quantidade: number;
+  descricao?: string;
+  status: string;
+  pdrReferencia?: string;
+  dataPrevista?: string;
+  dataConfirmacao?: string;
+  qtdRecebida: number;
+  dataExpiracao?: string;
 }
 
 interface EventoDTO {
   id: string;
   titulo: string;
   status: string;
+}
+
+interface PendingEvento {
+  pcEventoId: string;
+  eventoId: string;
+  titulo: string;
+  dataNotificacao?: string;
+}
+
+interface WorkerDisponibilidadeDTO {
+  id: string;
+  pcEventoId: string;
+  eventoId: string;
+  usuarioId: string;
+  usuarioNome: string;
+  status: 'PENDENTE' | 'CONFIRMADA' | 'RECUSADA' | 'EXPIRADA';
 }
 
 // ── Constantes ────────────────────────────────────────────────
@@ -99,59 +148,78 @@ export default function MeuPcScreen() {
     [accessToken],
   );
 
-  const [pc, setPc]                 = useState<PcDTO | null>(null);
-  const [estoque, setEstoque]       = useState<EstoqueItem[]>([]);
-  const [demandas, setDemandas]     = useState<DemandaDTO[]>([]);
-  const [tipos, setTipos]           = useState<TipoDTO[]>([]);
+  const [pc, setPc]                       = useState<PcDTO | null>(null);
+  const [estoque, setEstoque]             = useState<EstoqueItem[]>([]);
+  const [demandas, setDemandas]           = useState<DemandaDTO[]>([]);
+  const [tipos, setTipos]                 = useState<TipoDTO[]>([]);
   const [eventosAceitos, setEventosAceitos] = useState<EventoSimples[]>([]);
-  const [noPc, setNoPc]             = useState(false);
-  const [loading, setLoading]       = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [pendingEventos, setPendingEventos] = useState<PendingEvento[]>([]);
+  const [doacoes, setDoacoes]             = useState<DoacaoDTO[]>([]);
+  const [motivosRecusa, setMotivosRecusa] = useState<MotivoRecusaDTO[]>([]);
+  const [workforce, setWorkforce]         = useState<WorkerDisponibilidadeDTO[]>([]);
+  const [noPc, setNoPc]                   = useState(false);
+  const [loading, setLoading]             = useState(true);
+  const [refreshing, setRefreshing]       = useState(false);
 
   const [addEstoqueOpen, setAddEstoqueOpen]       = useState(false);
   const [createDemandaOpen, setCreateDemandaOpen] = useState(false);
+  const [recusarOpen, setRecusarOpen]             = useState(false);
+  const [recusandoEvento, setRecusandoEvento]     = useState<PendingEvento | null>(null);
+  const [recebendoDoacao, setRecebendoDoacao]     = useState<DoacaoDTO | null>(null);
   const [toggling, setToggling]                   = useState(false);
 
-  // Debounce por tipoId para atualização de estoque
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const loadAll = useCallback(async () => {
     if (!accessToken) return;
     try {
-      // 1. ID do usuário logado
       const meRes = await api.get('/usuarios/me', { headers });
       const userId = meRes.data.id as string;
 
-      // 2. Encontrar o PC do qual é coordenador
       const pcsRes = await api.get<PcDTO[]>('/pontos-coleta', { headers });
       const myPc = pcsRes.data.find((p) => p.coordenadorId === userId) ?? null;
       if (!myPc) { setNoPc(true); return; }
       setPc(myPc);
 
-      // 3. Dados paralelos
-      const [estoqueRes, demandasRes, pcEventosRes, tiposRes, eventosRes] = await Promise.all([
-        api.get(`/pontos-coleta/${myPc.id}/estoque`, { headers }),
-        api.get(`/pontos-coleta/${myPc.id}/demandas?is_active=true`, { headers }),
-        api.get(`/pontos-coleta/${myPc.id}/eventos`, { headers }),
-        api.get('/lookup/demanda-tipos'),
-        api.get('/eventos', { headers }),
-      ]);
+      const [estoqueRes, demandasRes, pcEventosRes, tiposRes, eventosRes, motivosRes, doacoesRes] =
+        await Promise.all([
+          api.get(`/pontos-coleta/${myPc.id}/estoque`, { headers }).catch(() => ({ data: [] })),
+          api.get(`/pontos-coleta/${myPc.id}/demandas?is_active=true`, { headers }).catch(() => ({ data: [] })),
+          api.get(`/pontos-coleta/${myPc.id}/eventos`, { headers }).catch(() => ({ data: [] })),
+          api.get('/lookup/demanda-tipos', { headers }).catch(() => ({ data: [] })),
+          api.get('/eventos', { headers }).catch(() => ({ data: [] })),
+          api.get('/pontos-coleta/motivos-recusa', { headers }).catch(() => ({ data: [] })),
+          api.get(`/pontos-coleta/${myPc.id}/doacoes`, { headers }).catch(() => ({ data: [] })),
+        ]);
 
       setEstoque(estoqueRes.data);
       setDemandas(demandasRes.data);
       setTipos(tiposRes.data);
+      setMotivosRecusa(motivosRes.data);
+      setDoacoes(doacoesRes.data);
 
-      // Apenas eventos que o PC aceitou
+      const allEventos = eventosRes.data as EventoDTO[];
+      const pcEventos  = pcEventosRes.data as PcEventoDTO[];
+
       const acceptedIds = new Set<string>(
-        (pcEventosRes.data as PcEventoDTO[])
-          .filter((pe) => pe.status === 'ACEITO')
-          .map((pe) => pe.eventoId),
+        pcEventos.filter((pe) => pe.status === 'ACEITO').map((pe) => pe.eventoId),
       );
       setEventosAceitos(
-        (eventosRes.data as EventoDTO[])
-          .filter((e) => acceptedIds.has(e.id))
-          .map((e) => ({ id: e.id, titulo: e.titulo })),
+        allEventos.filter((e) => acceptedIds.has(e.id)).map((e) => ({ id: e.id, titulo: e.titulo })),
       );
+
+      const pending: PendingEvento[] = pcEventos
+        .filter((pe) => pe.status === 'NOTIFICADO')
+        .map((pe) => {
+          const ev = allEventos.find((e) => e.id === pe.eventoId);
+          return {
+            pcEventoId: pe.id,
+            eventoId: pe.eventoId,
+            titulo: ev?.titulo ?? pe.eventoId,
+            dataNotificacao: pe.dataNotificacao,
+          };
+        });
+      setPendingEventos(pending);
     } catch {
       // silencioso — estado vazio exibido
     } finally {
@@ -162,10 +230,18 @@ export default function MeuPcScreen() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Limpa debounces ao desmontar
   useEffect(() => {
     return () => { Object.values(debounceRefs.current).forEach(clearTimeout); };
   }, []);
+
+  // Carrega equipe (workforce) do primeiro evento aceito
+  useEffect(() => {
+    if (!eventosAceitos[0] || !pc || !accessToken) return;
+    api.get(
+      `/pontos-coleta/${pc.id}/eventos/${eventosAceitos[0].id}/workforce`,
+      { headers },
+    ).then((res) => setWorkforce(res.data as WorkerDisponibilidadeDTO[])).catch(() => {});
+  }, [eventosAceitos, pc, accessToken, headers]);
 
   // ── Toggle isActive ────────────────────────────────────────
 
@@ -178,7 +254,6 @@ export default function MeuPcScreen() {
       const endpoint = newActive ? 'ativar' : 'desativar';
       await api.patch(`/pontos-coleta/${pc.id}/${endpoint}`, null, { headers });
     } catch {
-      // Reverte em caso de erro
       setPc((prev) => prev ? { ...prev, isActive: !newActive } : null);
       Alert.alert('Erro', 'Não foi possível alterar o status do ponto de coleta.');
     } finally {
@@ -195,18 +270,18 @@ export default function MeuPcScreen() {
     );
     clearTimeout(debounceRefs.current[item.idTipo]);
     debounceRefs.current[item.idTipo] = setTimeout(() => {
-      api.patch(
-        `/pontos-coleta/${pc!.id}/estoque/${item.idTipo}?quantidade=${newQtd}`,
-        null,
+      api.post(
+        `/pontos-coleta/${pc!.id}/estoque/ajustar`,
+        { idTipo: item.idTipo, delta },
         { headers },
       ).catch(() => {});
     }, 700);
   }
 
   async function handleAddEstoque(tipoId: string, quantidade: number) {
-    await api.patch(
-      `/pontos-coleta/${pc!.id}/estoque/${tipoId}?quantidade=${quantidade}`,
-      null,
+    await api.post(
+      `/pontos-coleta/${pc!.id}/estoque/ajustar`,
+      { idTipo: tipoId, delta: quantidade },
       { headers },
     );
     const res = await api.get(`/pontos-coleta/${pc!.id}/estoque`, { headers });
@@ -222,11 +297,8 @@ export default function MeuPcScreen() {
   ) {
     await api.post(
       `/pontos-coleta/${pc!.id}/demandas`,
-      {
-        idEvento: eventoId, idTipo: tipoId, prioridade,
-        qtdSolicitada: quantidade,
-        descricao: descricao.trim() || undefined,
-      },
+      { idEvento: eventoId, idTipo: tipoId, prioridade, qtdSolicitada: quantidade,
+        descricao: descricao.trim() || undefined },
       { headers },
     );
     const res = await api.get(`/pontos-coleta/${pc!.id}/demandas?is_active=true`, { headers });
@@ -234,15 +306,53 @@ export default function MeuPcScreen() {
     setCreateDemandaOpen(false);
   }
 
-  async function handleDesativarDemanda(demandaId: string) {
+  async function handleFecharDemanda(demandaId: string) {
     try {
-      await api.patch(
-        `/pontos-coleta/${pc!.id}/demandas/${demandaId}/desativar`,
-        null, { headers },
-      );
+      await api.patch(`/pontos-coleta/${pc!.id}/demandas/${demandaId}/fechar`, null, { headers });
       setDemandas((prev) => prev.filter((d) => d.id !== demandaId));
     } catch {
       Alert.alert('Erro', 'Não foi possível encerrar a demanda.');
+    }
+  }
+
+  // ── Ações de evento (aceitar / recusar) ────────────────────
+
+  async function handleAceitarEvento(ev: PendingEvento) {
+    try {
+      await api.patch(`/pontos-coleta/${pc!.id}/eventos/${ev.eventoId}/aceitar`, null, { headers });
+      setPendingEventos((prev) => prev.filter((p) => p.eventoId !== ev.eventoId));
+      setEventosAceitos((prev) => [...prev, { id: ev.eventoId, titulo: ev.titulo }]);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível aceitar o evento.');
+    }
+  }
+
+  async function handleRecusarEvento(ev: PendingEvento, motivoId: string, descricao?: string) {
+    try {
+      await api.patch(
+        `/pontos-coleta/${pc!.id}/eventos/${ev.eventoId}/recusar`,
+        { motivoRecusaId: motivoId, descricao: descricao?.trim() || undefined },
+        { headers },
+      );
+      setPendingEventos((prev) => prev.filter((p) => p.eventoId !== ev.eventoId));
+      setRecusarOpen(false);
+      setRecusandoEvento(null);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível recusar o evento.');
+    }
+  }
+
+  // ── Ações de doação ────────────────────────────────────────
+
+  async function handleReceberDoacao(doacaoId: string, qtd: number) {
+    try {
+      await api.patch(`/doacoes/${doacaoId}/receber`, { qtdRecebida: qtd }, { headers });
+      setDoacoes((prev) => prev.filter((d) => d.id !== doacaoId));
+      const estoqueRes = await api.get(`/pontos-coleta/${pc!.id}/estoque`, { headers });
+      setEstoque(estoqueRes.data);
+      setRecebendoDoacao(null);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível registrar o recebimento.');
     }
   }
 
@@ -273,8 +383,8 @@ export default function MeuPcScreen() {
     );
   }
 
-  const tiposNoEstoque    = new Set(estoque.map((e) => e.idTipo));
-  const tiposDisponiveis  = tipos.filter((t) => !tiposNoEstoque.has(t.id));
+  const tiposNoEstoque   = new Set(estoque.map((e) => e.idTipo));
+  const tiposDisponiveis = tipos.filter((t) => !tiposNoEstoque.has(t.id));
   const semEventosAceitos = eventosAceitos.length === 0;
 
   return (
@@ -297,7 +407,6 @@ export default function MeuPcScreen() {
         <Text style={styles.pcNome} numberOfLines={2}>{pc!.pcNome}</Text>
 
         <View style={styles.pcChipRow}>
-          {/* Chip de status com switch embutido */}
           {pc!.isActive ? (
             <View style={styles.chipAtivo}>
               <Switch
@@ -324,22 +433,25 @@ export default function MeuPcScreen() {
             </View>
           )}
 
-          {/* Evento vinculado — clicável, só aparece quando ativo */}
           {pc!.isActive && eventosAceitos.length > 0 && (
             <TouchableOpacity
               style={styles.chipEvento}
               onPress={() =>
-                router.push({
-                  pathname: '/evento-detalhe',
-                  params: { id: eventosAceitos[0].id },
-                } as never)
+                router.push({ pathname: '/evento-detalhe', params: { id: eventosAceitos[0].id } } as never)
               }
               activeOpacity={0.75}
             >
-              <Ionicons name="flash" size={11} color={Colors.blue.medium} />
               <Text style={styles.chipEventoText} numberOfLines={1}>
                 {eventosAceitos[0].titulo}
               </Text>
+              {workforce.length > 0 && (
+                <View style={styles.workforceBadge}>
+                  <Ionicons name="people" size={9} color="#fff" />
+                  <Text style={styles.workforceBadgeText}>
+                    {workforce.filter((w) => w.status === 'CONFIRMADA').length}/{workforce.length}
+                  </Text>
+                </View>
+              )}
               <Ionicons name="chevron-forward" size={11} color={Colors.blue.medium} />
             </TouchableOpacity>
           )}
@@ -355,25 +467,27 @@ export default function MeuPcScreen() {
               </Text>
             </View>
           )}
-
+          {pc!.statusVerificacao === 'REJEITADO' && pc!.motivoRejeicao && (
+            <View style={styles.rejeitadoBadge}>
+              <Ionicons name="warning-outline" size={13} color="#DC2626" />
+              <Text style={styles.rejeitadoText} numberOfLines={2}>{pc!.motivoRejeicao}</Text>
+            </View>
+          )}
           {pc!.pcTipo ? (
             <View style={styles.pcRow}>
               <Ionicons name="business-outline" size={13} color="#64748B" />
               <Text style={styles.pcRowText}>{pc!.pcTipo}</Text>
             </View>
           ) : null}
-
           {pc!.pcContato ? (
             <View style={styles.pcRow}>
               <Ionicons name="call-outline" size={13} color="#64748B" />
               <Text style={styles.pcRowText}>{pc!.pcContato}</Text>
             </View>
           ) : null}
-
           {pc!.pcDesc ? (
             <Text style={styles.pcDesc} numberOfLines={3}>{pc!.pcDesc}</Text>
           ) : null}
-
           <View style={styles.pcRow}>
             <Ionicons name="location-outline" size={13} color="#64748B" />
             <Text style={styles.pcRowText}>
@@ -382,152 +496,243 @@ export default function MeuPcScreen() {
           </View>
         </View>
 
-        {/* ── Conteúdo bloqueado quando inativo ─────────── */}
-        <View
-          style={!pc!.isActive && styles.sectionsDisabled}
-          pointerEvents={pc!.isActive ? 'auto' : 'none'}
-        >
-
-        {/* ── Seção Estoque ──────────────────────────────── */}
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cube-outline" size={17} color={Colors.blue.dark} />
-          <Text style={styles.sectionTitle}>Estoque</Text>
-          <Text style={styles.sectionCount}>{estoque.length} tipos</Text>
-          <TouchableOpacity
-            style={[styles.sectionBtn, tiposDisponiveis.length === 0 && { opacity: 0.4 }]}
-            onPress={() => setAddEstoqueOpen(true)}
-            disabled={tiposDisponiveis.length === 0}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={14} color="#fff" />
-            <Text style={styles.sectionBtnText}>Adicionar</Text>
-          </TouchableOpacity>
-        </View>
-
-        {estoque.length === 0 ? (
-          <View style={styles.emptySection}>
-            <Text style={styles.emptySectionText}>Nenhum item cadastrado no estoque.</Text>
-          </View>
-        ) : (
-          estoque.map((item) => (
-            <View key={item.idTipo} style={styles.estoqueCard}>
-              <Text style={styles.estoqueNome} numberOfLines={1}>{item.tipoNome}</Text>
-              <View style={styles.estoqueControls}>
-                <TouchableOpacity
-                  style={[styles.qtdBtn, item.quantidade === 0 && styles.qtdBtnDisabled]}
-                  onPress={() => adjustStock(item, -1)}
-                  disabled={item.quantidade === 0}
-                  hitSlop={10}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name="remove"
-                    size={18}
-                    color={item.quantidade === 0 ? '#CBD5E1' : Colors.blue.dark}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.qtdText}>{item.quantidade}</Text>
-                <TouchableOpacity
-                  style={styles.qtdBtn}
-                  onPress={() => adjustStock(item, 1)}
-                  hitSlop={10}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="add" size={18} color={Colors.blue.dark} />
-                </TouchableOpacity>
-              </View>
+        {/* ── Eventos pendentes de resposta ──────────────── */}
+        {pendingEventos.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="mail-unread-outline" size={17} color="#C2410C" />
+              <Text style={[styles.sectionTitle, { color: '#C2410C' }]}>Convites de Evento</Text>
+              <Text style={[styles.sectionCount, { backgroundColor: '#FFEDD5', color: '#C2410C' }]}>
+                {pendingEventos.length}
+              </Text>
             </View>
-          ))
-        )}
 
-        {/* ── Seção Demandas ─────────────────────────────── */}
-        <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-          <Ionicons name="list-outline" size={17} color={Colors.brand.orange} />
-          <Text style={[styles.sectionTitle, { color: Colors.brand.orange }]}>Demandas ativas</Text>
-          <Text style={styles.sectionCount}>{demandas.length}</Text>
-          <TouchableOpacity
-            style={[
-              styles.sectionBtn,
-              { backgroundColor: Colors.brand.orange },
-              semEventosAceitos && { opacity: 0.4 },
-            ]}
-            onPress={() => setCreateDemandaOpen(true)}
-            disabled={semEventosAceitos}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={14} color="#fff" />
-            <Text style={styles.sectionBtnText}>Nova</Text>
-          </TouchableOpacity>
-        </View>
-
-        {semEventosAceitos && (
-          <View style={styles.infoBox}>
-            <Ionicons name="information-circle-outline" size={14} color="#64748B" />
-            <Text style={styles.infoBoxText}>
-              Aceite o vínculo com um evento para poder emitir demandas.
-            </Text>
-          </View>
-        )}
-
-        {demandas.length === 0 ? (
-          <View style={styles.emptySection}>
-            <Text style={styles.emptySectionText}>Nenhuma demanda ativa.</Text>
-          </View>
-        ) : (
-          demandas.map((d) => {
-            const cfg = PRIORIDADE_CFG[d.prioridade] ?? PRIORIDADE_CFG.MEDIA;
-            const pct = d.qtdSolicitada > 0
-              ? Math.min((d.qtdAtendida / d.qtdSolicitada) * 100, 100)
-              : 0;
-            return (
-              <View key={d.id} style={styles.demandaCard}>
-                <View style={[styles.demandaAccent, { backgroundColor: cfg.color }]} />
-                <View style={styles.demandaBody}>
-                  <View style={styles.demandaTop}>
-                    <View style={[styles.demandaBadge, { backgroundColor: cfg.bg }]}>
-                      <Text style={[styles.demandaBadgeText, { color: cfg.color }]}>
-                        {cfg.label}
-                      </Text>
-                    </View>
-                    <Text style={styles.demandaQtd}>
-                      {d.qtdAtendida}/{d.qtdSolicitada}
+            {pendingEventos.map((ev) => (
+              <View key={ev.eventoId} style={styles.eventoCard}>
+                <View style={styles.eventoCardAccent} />
+                <View style={styles.eventoCardBody}>
+                  <Text style={styles.eventoCardTitulo} numberOfLines={2}>{ev.titulo}</Text>
+                  {ev.dataNotificacao && (
+                    <Text style={styles.eventoCardData}>
+                      Convidado em {new Date(ev.dataNotificacao).toLocaleDateString('pt-BR')}
                     </Text>
+                  )}
+                  <View style={styles.eventoCardBtns}>
                     <TouchableOpacity
-                      onPress={() => Alert.alert(
-                        'Encerrar demanda',
-                        `Deseja encerrar a demanda de "${d.tipoNome}"?`,
-                        [
-                          { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Encerrar', style: 'destructive', onPress: () => handleDesativarDemanda(d.id) },
-                        ],
-                      )}
-                      hitSlop={8}
+                      style={styles.eventoAceitarBtn}
+                      onPress={() => handleAceitarEvento(ev)}
+                      activeOpacity={0.7}
                     >
-                      <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                      <Ionicons name="checkmark" size={14} color="#fff" />
+                      <Text style={styles.eventoBtnText}>Aceitar</Text>
                     </TouchableOpacity>
-                  </View>
-
-                  <Text style={styles.demandaNome}>{d.tipoNome}</Text>
-                  {d.descricao ? (
-                    <Text style={styles.demandaDesc} numberOfLines={2}>{d.descricao}</Text>
-                  ) : null}
-
-                  <View style={styles.progressBar}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${pct}%` as any, backgroundColor: cfg.color },
-                      ]}
-                    />
+                    <TouchableOpacity
+                      style={styles.eventoRecusarBtn}
+                      onPress={() => { setRecusandoEvento(ev); setRecusarOpen(true); }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="close" size={14} color="#DC2626" />
+                      <Text style={[styles.eventoBtnText, { color: '#DC2626' }]}>Recusar</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
-            );
-          })
+            ))}
+          </>
         )}
 
-        <View style={{ height: 32 }} />
-        </View>{/* fim wrapper bloqueável */}
+        {/* ── Conteúdo bloqueado quando inativo ─────────── */}
+        <View
+          style={!pc!.isActive ? styles.sectionsDisabled : undefined}
+          pointerEvents={pc!.isActive ? 'auto' : 'none'}
+        >
+
+          {/* ── Seção Estoque ──────────────────────────────── */}
+          <View style={styles.sectionHeader}>
+            <Ionicons name="cube-outline" size={17} color={Colors.blue.dark} />
+            <Text style={styles.sectionTitle}>Estoque</Text>
+            <Text style={styles.sectionCount}>{estoque.length} tipos</Text>
+            <TouchableOpacity
+              style={[styles.sectionBtn, tiposDisponiveis.length === 0 && { opacity: 0.4 }]}
+              onPress={() => setAddEstoqueOpen(true)}
+              disabled={tiposDisponiveis.length === 0}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={14} color="#fff" />
+              <Text style={styles.sectionBtnText}>Adicionar</Text>
+            </TouchableOpacity>
+          </View>
+
+          {estoque.length === 0 ? (
+            <View style={styles.emptySection}>
+              <Text style={styles.emptySectionText}>Nenhum item cadastrado no estoque.</Text>
+            </View>
+          ) : (
+            estoque.map((item) => (
+              <View key={item.idTipo} style={styles.estoqueCard}>
+                <Text style={styles.estoqueNome} numberOfLines={1}>{item.tipoNome}</Text>
+                <View style={styles.estoqueControls}>
+                  <TouchableOpacity
+                    style={[styles.qtdBtn, item.quantidade === 0 && styles.qtdBtnDisabled]}
+                    onPress={() => adjustStock(item, -1)}
+                    disabled={item.quantidade === 0}
+                    hitSlop={10}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="remove"
+                      size={18}
+                      color={item.quantidade === 0 ? '#CBD5E1' : Colors.blue.dark}
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.qtdText}>{item.quantidade}</Text>
+                  <TouchableOpacity
+                    style={styles.qtdBtn}
+                    onPress={() => adjustStock(item, 1)}
+                    hitSlop={10}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={18} color={Colors.blue.dark} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+
+          {/* ── Doações pendentes ──────────────────────────── */}
+          {doacoes.length > 0 && (
+            <>
+              <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+                <Ionicons name="gift-outline" size={17} color="#7C3AED" />
+                <Text style={[styles.sectionTitle, { color: '#7C3AED' }]}>Doações Pendentes</Text>
+                <Text style={[styles.sectionCount, { backgroundColor: '#EDE9FE', color: '#7C3AED' }]}>
+                  {doacoes.length}
+                </Text>
+              </View>
+
+              {doacoes.map((doacao) => {
+                const tipoNome = tipos.find((t) => t.id === doacao.idTipo)?.nome ?? doacao.idTipo;
+                return (
+                  <View key={doacao.id} style={styles.doacaoCard}>
+                    <View style={styles.doacaoInfo}>
+                      <Text style={styles.doacaoTipo} numberOfLines={1}>{tipoNome}</Text>
+                      <Text style={styles.doacaoQtd}>Qtd: {doacao.quantidade}</Text>
+                      {doacao.descricao ? (
+                        <Text style={styles.doacaoDesc} numberOfLines={1}>{doacao.descricao}</Text>
+                      ) : null}
+                      {doacao.dataPrevista && (
+                        <Text style={styles.doacaoData}>
+                          Previsto: {new Date(doacao.dataPrevista).toLocaleDateString('pt-BR')}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={styles.receberBtn}
+                      onPress={() => setRecebendoDoacao(doacao)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.receberBtnText}>Receber</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </>
+          )}
+
+          {/* ── Seção Demandas ─────────────────────────────── */}
+          <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+            <Ionicons name="list-outline" size={17} color={Colors.brand.orange} />
+            <Text style={[styles.sectionTitle, { color: Colors.brand.orange }]}>Demandas ativas</Text>
+            <Text style={styles.sectionCount}>{demandas.length}</Text>
+            <TouchableOpacity
+              style={[
+                styles.sectionBtn,
+                { backgroundColor: Colors.brand.orange },
+                semEventosAceitos && { opacity: 0.4 },
+              ]}
+              onPress={() => setCreateDemandaOpen(true)}
+              disabled={semEventosAceitos}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={14} color="#fff" />
+              <Text style={styles.sectionBtnText}>Nova</Text>
+            </TouchableOpacity>
+          </View>
+
+          {semEventosAceitos && (
+            <View style={styles.infoBox}>
+              <Ionicons name="information-circle-outline" size={14} color="#64748B" />
+              <Text style={styles.infoBoxText}>
+                Aceite o vínculo com um evento para poder emitir demandas.
+              </Text>
+            </View>
+          )}
+
+          {demandas.length === 0 ? (
+            <View style={styles.emptySection}>
+              <Text style={styles.emptySectionText}>Nenhuma demanda ativa.</Text>
+            </View>
+          ) : (
+            demandas.map((d) => {
+              const cfg   = PRIORIDADE_CFG[d.prioridade] ?? PRIORIDADE_CFG.MEDIA;
+              const total = d.qtdMaximaCapacidade ?? d.qtdSolicitada;
+              const pct   = total > 0 ? Math.min((d.qtdAtendida / total) * 100, 100) : 0;
+              return (
+                <View key={d.id} style={styles.demandaCard}>
+                  <View style={[styles.demandaAccent, { backgroundColor: cfg.color }]} />
+                  <View style={styles.demandaBody}>
+                    <View style={styles.demandaTop}>
+                      <View style={[styles.demandaBadge, { backgroundColor: cfg.bg }]}>
+                        <Text style={[styles.demandaBadgeText, { color: cfg.color }]}>
+                          {cfg.label}
+                        </Text>
+                      </View>
+                      <Text style={styles.demandaQtd}>
+                        {d.qtdAtendida}/{d.qtdSolicitada}
+                        {d.qtdMaximaCapacidade ? ` · cap. ${d.qtdMaximaCapacidade}` : ''}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => Alert.alert(
+                          'Encerrar demanda',
+                          `Deseja encerrar a demanda de "${d.tipoNome}"?`,
+                          [
+                            { text: 'Cancelar', style: 'cancel' },
+                            { text: 'Encerrar', style: 'destructive',
+                              onPress: () => handleFecharDemanda(d.id) },
+                          ],
+                        )}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="close-circle-outline" size={20} color="#94A3B8" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={styles.demandaNome}>{d.tipoNome}</Text>
+                    {d.descricao ? (
+                      <Text style={styles.demandaDesc} numberOfLines={2}>{d.descricao}</Text>
+                    ) : null}
+                    {d.qtdIntencionada > 0 && (
+                      <Text style={styles.demandaIntencionada}>
+                        {d.qtdIntencionada} em trânsito
+                      </Text>
+                    )}
+
+                    <View style={styles.progressBar}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${pct}%` as any, backgroundColor: cfg.color },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
+
+          <View style={{ height: 32 }} />
+        </View>
       </ScrollView>
 
       {/* ── Modais ─────────────────────────────────────────── */}
@@ -544,6 +749,24 @@ export default function MeuPcScreen() {
         onConfirm={handleCreateDemanda}
         onClose={() => setCreateDemandaOpen(false)}
       />
+      {recusandoEvento && (
+        <RecusarEventoModal
+          visible={recusarOpen}
+          evento={recusandoEvento}
+          motivos={motivosRecusa}
+          onConfirm={handleRecusarEvento}
+          onClose={() => { setRecusarOpen(false); setRecusandoEvento(null); }}
+        />
+      )}
+      {recebendoDoacao && (
+        <ReceberDoacaoModal
+          visible
+          doacao={recebendoDoacao}
+          tipoNome={tipos.find((t) => t.id === recebendoDoacao.idTipo)?.nome ?? ''}
+          onConfirm={handleReceberDoacao}
+          onClose={() => setRecebendoDoacao(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -561,23 +784,26 @@ function AddEstoqueModal({ visible, tipos, onConfirm, onClose }: AddEstoqueModal
   const [selected, setSelected] = useState<string | null>(null);
   const [qtdStr, setQtdStr]     = useState('0');
   const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
-  function reset() { setSelected(null); setQtdStr('0'); }
+  function reset() { setSelected(null); setQtdStr('0'); setError(null); }
   function close() { reset(); onClose(); }
 
   async function confirm() {
     if (!selected) return;
+    setError(null);
     const qtd = parseInt(qtdStr, 10);
-    if (isNaN(qtd) || qtd < 0) { Alert.alert('Atenção', 'Quantidade inválida.'); return; }
-    setSaving(true);
-    try {
-      await onConfirm(selected, qtd);
-      reset();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível adicionar o item.');
-    } finally {
-      setSaving(false);
+    if (isNaN(qtd) || qtd < 0) {
+      setError('Informe uma quantidade válida (mínimo 0).');
+      return;
     }
+    setSaving(true);
+    try { await onConfirm(selected, qtd); reset(); }
+    catch (e: any) {
+      const msg = e?.response?.data?.message ?? 'Não foi possível adicionar o item. Tente novamente.';
+      setError(msg);
+    }
+    finally { setSaving(false); }
   }
 
   return (
@@ -595,9 +821,7 @@ function AddEstoqueModal({ visible, tipos, onConfirm, onClose }: AddEstoqueModal
           </View>
 
           {tipos.length === 0 ? (
-            <Text style={styles.emptySectionText}>
-              Todos os tipos de item já estão no estoque.
-            </Text>
+            <Text style={styles.emptySectionText}>Todos os tipos já estão no estoque.</Text>
           ) : (
             <>
               <Text style={styles.modalSubtitle}>Selecione o tipo de item</Text>
@@ -609,20 +833,13 @@ function AddEstoqueModal({ visible, tipos, onConfirm, onClose }: AddEstoqueModal
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[styles.tipoItem, selected === item.id && styles.tipoItemSelected]}
-                    onPress={() => setSelected(item.id)}
+                    onPress={() => { setSelected(item.id); setError(null); }}
                     activeOpacity={0.7}
                   >
-                    <Text
-                      style={[
-                        styles.tipoNome,
-                        selected === item.id && { color: Colors.blue.dark, fontWeight: '700' },
-                      ]}
-                    >
+                    <Text style={[styles.tipoNome, selected === item.id && { color: Colors.blue.dark, fontWeight: '700' }]}>
                       {item.nome}
                     </Text>
-                    {selected === item.id && (
-                      <Ionicons name="checkmark-circle" size={18} color={Colors.blue.dark} />
-                    )}
+                    {selected === item.id && <Ionicons name="checkmark-circle" size={18} color={Colors.blue.dark} />}
                   </TouchableOpacity>
                 )}
               />
@@ -633,13 +850,20 @@ function AddEstoqueModal({ visible, tipos, onConfirm, onClose }: AddEstoqueModal
                   <TextInput
                     style={styles.textInput}
                     value={qtdStr}
-                    onChangeText={setQtdStr}
+                    onChangeText={(v) => { setQtdStr(v); setError(null); }}
                     keyboardType="numeric"
                     selectTextOnFocus
                   />
                 </View>
               )}
             </>
+          )}
+
+          {error && (
+            <View style={styles.modalErrorBox}>
+              <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
+              <Text style={styles.modalErrorText}>{error}</Text>
+            </View>
           )}
 
           <TouchableOpacity
@@ -664,25 +888,20 @@ interface CreateDemandaModalProps {
   visible: boolean;
   tipos: TipoDTO[];
   eventos: EventoSimples[];
-  onConfirm: (
-    tipoId: string, eventoId: string, prioridade: string,
-    quantidade: number, descricao: string,
-  ) => Promise<void>;
+  onConfirm: (tipoId: string, eventoId: string, prioridade: string, quantidade: number, descricao: string) => Promise<void>;
   onClose: () => void;
 }
 
 type DemandaStep = 'tipo' | 'evento' | 'detalhes';
 
-function CreateDemandaModal({
-  visible, tipos, eventos, onConfirm, onClose,
-}: CreateDemandaModalProps) {
-  const [step, setStep]           = useState<DemandaStep>('tipo');
-  const [tipoId, setTipoId]       = useState<string | null>(null);
-  const [eventoId, setEventoId]   = useState<string | null>(null);
+function CreateDemandaModal({ visible, tipos, eventos, onConfirm, onClose }: CreateDemandaModalProps) {
+  const [step, setStep]             = useState<DemandaStep>('tipo');
+  const [tipoId, setTipoId]         = useState<string | null>(null);
+  const [eventoId, setEventoId]     = useState<string | null>(null);
   const [prioridade, setPrioridade] = useState<Prioridade>('MEDIA');
-  const [qtdStr, setQtdStr]       = useState('1');
-  const [descricao, setDescricao] = useState('');
-  const [saving, setSaving]       = useState(false);
+  const [qtdStr, setQtdStr]         = useState('1');
+  const [descricao, setDescricao]   = useState('');
+  const [saving, setSaving]         = useState(false);
 
   function reset() {
     setStep('tipo'); setTipoId(null); setEventoId(null);
@@ -695,18 +914,13 @@ function CreateDemandaModal({
     const qtd = parseInt(qtdStr, 10);
     if (isNaN(qtd) || qtd < 1) { Alert.alert('Atenção', 'Quantidade deve ser ao menos 1.'); return; }
     setSaving(true);
-    try {
-      await onConfirm(tipoId, eventoId, prioridade, qtd, descricao);
-      reset();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível criar a demanda.');
-    } finally {
-      setSaving(false);
-    }
+    try { await onConfirm(tipoId, eventoId, prioridade, qtd, descricao); reset(); }
+    catch { Alert.alert('Erro', 'Não foi possível criar a demanda.'); }
+    finally { setSaving(false); }
   }
 
-  const tipoNome   = tipos.find((t) => t.id === tipoId)?.nome ?? '';
-  const eventoTit  = eventos.find((e) => e.id === eventoId)?.titulo ?? '';
+  const tipoNome  = tipos.find((t) => t.id === tipoId)?.nome ?? '';
+  const eventoTit = eventos.find((e) => e.id === eventoId)?.titulo ?? '';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
@@ -715,7 +929,6 @@ function CreateDemandaModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.modalSheet}>
-          {/* Cabeçalho */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Nova Demanda</Text>
             <TouchableOpacity onPress={close} hitSlop={8}>
@@ -723,7 +936,6 @@ function CreateDemandaModal({
             </TouchableOpacity>
           </View>
 
-          {/* Passo 1 — Tipo */}
           {step === 'tipo' && (
             <>
               <Text style={styles.modalSubtitle}>Qual item está em falta?</Text>
@@ -738,12 +950,7 @@ function CreateDemandaModal({
                     onPress={() => { setTipoId(item.id); setStep('evento'); }}
                     activeOpacity={0.7}
                   >
-                    <Text
-                      style={[
-                        styles.tipoNome,
-                        tipoId === item.id && { color: Colors.blue.dark, fontWeight: '700' },
-                      ]}
-                    >
+                    <Text style={[styles.tipoNome, tipoId === item.id && { color: Colors.blue.dark, fontWeight: '700' }]}>
                       {item.nome}
                     </Text>
                     <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
@@ -753,7 +960,6 @@ function CreateDemandaModal({
             </>
           )}
 
-          {/* Passo 2 — Evento */}
           {step === 'evento' && (
             <>
               <Text style={styles.modalSubtitle}>Vincular ao evento</Text>
@@ -769,10 +975,7 @@ function CreateDemandaModal({
                     activeOpacity={0.7}
                   >
                     <Text
-                      style={[
-                        styles.tipoNome,
-                        eventoId === item.id && { color: Colors.blue.dark, fontWeight: '700' },
-                      ]}
+                      style={[styles.tipoNome, eventoId === item.id && { color: Colors.blue.dark, fontWeight: '700' }]}
                       numberOfLines={2}
                     >
                       {item.titulo}
@@ -788,10 +991,8 @@ function CreateDemandaModal({
             </>
           )}
 
-          {/* Passo 3 — Detalhes */}
           {step === 'detalhes' && (
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Chips editáveis com o que foi selecionado */}
               <View style={styles.chipRow}>
                 <TouchableOpacity style={styles.summaryChip} onPress={() => setStep('tipo')}>
                   <Text style={styles.summaryChipText} numberOfLines={1}>{tipoNome}</Text>
@@ -803,7 +1004,6 @@ function CreateDemandaModal({
                 </TouchableOpacity>
               </View>
 
-              {/* Prioridade */}
               <Text style={styles.fieldLabel}>Prioridade</Text>
               <View style={styles.prioridadeRow}>
                 {PRIORIDADES.map((p) => {
@@ -816,15 +1016,12 @@ function CreateDemandaModal({
                       onPress={() => setPrioridade(p)}
                       activeOpacity={0.75}
                     >
-                      <Text style={[styles.prioBtnText, sel && { color: '#fff' }]}>
-                        {cfg.label}
-                      </Text>
+                      <Text style={[styles.prioBtnText, sel && { color: '#fff' }]}>{cfg.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              {/* Quantidade */}
               <Text style={styles.fieldLabel}>Quantidade solicitada</Text>
               <TextInput
                 style={styles.textInput}
@@ -834,7 +1031,6 @@ function CreateDemandaModal({
                 selectTextOnFocus
               />
 
-              {/* Descrição */}
               <Text style={styles.fieldLabel}>Descrição (opcional)</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
@@ -846,11 +1042,7 @@ function CreateDemandaModal({
               />
 
               <TouchableOpacity
-                style={[
-                  styles.confirmBtn,
-                  { backgroundColor: Colors.brand.orange },
-                  saving && { opacity: 0.5 },
-                ]}
+                style={[styles.confirmBtn, { backgroundColor: Colors.brand.orange }, saving && { opacity: 0.5 }]}
                 onPress={confirm}
                 disabled={saving}
                 activeOpacity={0.8}
@@ -867,6 +1059,181 @@ function CreateDemandaModal({
   );
 }
 
+// ── Modal: Recusar Evento ─────────────────────────────────────
+
+interface RecusarEventoModalProps {
+  visible: boolean;
+  evento: PendingEvento;
+  motivos: MotivoRecusaDTO[];
+  onConfirm: (ev: PendingEvento, motivoId: string, descricao?: string) => Promise<void>;
+  onClose: () => void;
+}
+
+function RecusarEventoModal({ visible, evento, motivos, onConfirm, onClose }: RecusarEventoModalProps) {
+  const [motivoId, setMotivoId]     = useState<string | null>(null);
+  const [descricao, setDescricao]   = useState('');
+  const [saving, setSaving]         = useState(false);
+
+  const motivoSelecionado = motivos.find((m) => m.id === motivoId);
+
+  function reset() { setMotivoId(null); setDescricao(''); }
+  function close() { reset(); onClose(); }
+
+  async function confirm() {
+    if (!motivoId) return;
+    if (motivoSelecionado?.descricaoObrigatoria && !descricao.trim()) {
+      Alert.alert('Atenção', 'Descrição obrigatória para este motivo.');
+      return;
+    }
+    setSaving(true);
+    try { await onConfirm(evento, motivoId, descricao); reset(); }
+    catch { Alert.alert('Erro', 'Não foi possível recusar o evento.'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Recusar Evento</Text>
+            <TouchableOpacity onPress={close} hitSlop={8}>
+              <Ionicons name="close" size={22} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.modalSubtitle} numberOfLines={2}>
+            {evento.titulo}
+          </Text>
+
+          <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>Motivo da recusa</Text>
+          <FlatList
+            data={motivos}
+            keyExtractor={(m) => m.id}
+            style={{ maxHeight: 180 }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.tipoItem, motivoId === item.id && styles.tipoItemSelected]}
+                onPress={() => setMotivoId(item.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tipoNome, motivoId === item.id && { color: Colors.blue.dark, fontWeight: '700' }]}>
+                  {item.label}
+                </Text>
+                {motivoId === item.id && <Ionicons name="checkmark-circle" size={18} color={Colors.blue.dark} />}
+              </TouchableOpacity>
+            )}
+          />
+
+          {motivoId && (
+            <View style={styles.modalField}>
+              <Text style={styles.fieldLabel}>
+                Descrição{motivoSelecionado?.descricaoObrigatoria ? ' (obrigatória)' : ' (opcional)'}
+              </Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                value={descricao}
+                onChangeText={setDescricao}
+                multiline
+                placeholder="Explique o motivo..."
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.confirmBtn, { backgroundColor: '#DC2626' }, (!motivoId || saving) && { opacity: 0.45 }]}
+            onPress={confirm}
+            disabled={!motivoId || saving}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.confirmBtnText}>Confirmar Recusa</Text>}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ── Modal: Receber Doação ─────────────────────────────────────
+
+interface ReceberDoacaoModalProps {
+  visible: boolean;
+  doacao: DoacaoDTO;
+  tipoNome: string;
+  onConfirm: (id: string, qtd: number) => Promise<void>;
+  onClose: () => void;
+}
+
+function ReceberDoacaoModal({ visible, doacao, tipoNome, onConfirm, onClose }: ReceberDoacaoModalProps) {
+  const [qtdStr, setQtdStr] = useState(String(doacao.quantidade));
+  const [saving, setSaving] = useState(false);
+
+  async function confirm() {
+    const qtd = parseInt(qtdStr, 10);
+    if (isNaN(qtd) || qtd < 1) { Alert.alert('Atenção', 'Quantidade inválida.'); return; }
+    if (qtd > doacao.quantidade) {
+      Alert.alert('Atenção', `Máximo permitido: ${doacao.quantidade}`);
+      return;
+    }
+    setSaving(true);
+    try { await onConfirm(doacao.id, qtd); }
+    catch { Alert.alert('Erro', 'Não foi possível registrar o recebimento.'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Receber Doação</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={8}>
+              <Ionicons name="close" size={22} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.modalSubtitle}>{tipoNome}</Text>
+          <Text style={[styles.fieldLabel, { marginBottom: 4 }]}>
+            Quantidade prevista: {doacao.quantidade}
+          </Text>
+
+          <View style={styles.modalField}>
+            <Text style={styles.fieldLabel}>Quantidade recebida</Text>
+            <TextInput
+              style={styles.textInput}
+              value={qtdStr}
+              onChangeText={setQtdStr}
+              keyboardType="numeric"
+              selectTextOnFocus
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.confirmBtn, { backgroundColor: '#7C3AED' }, saving && { opacity: 0.5 }]}
+            onPress={confirm}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.confirmBtnText}>Confirmar Recebimento</Text>}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ── Estilos ───────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -877,9 +1244,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, color: '#94A3B8', textAlign: 'center', lineHeight: 20 },
 
   // ── PC nome + chips ──────────────────────────────────────
-  pcNome: {
-    fontSize: 22, fontWeight: '800', color: Colors.blue.dark, marginBottom: 8,
-  },
+  pcNome: { fontSize: 22, fontWeight: '800', color: Colors.blue.dark, marginBottom: 8 },
   pcChipRow: {
     flexDirection: 'row', alignItems: 'center',
     gap: 8, marginBottom: 14, flexWrap: 'wrap',
@@ -904,8 +1269,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5, maxWidth: 200,
   },
   chipEventoText: { fontSize: 12, fontWeight: '600', color: Colors.blue.medium, flex: 1 },
+  workforceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: Colors.blue.dark, borderRadius: 8,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  workforceBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
 
-  // ── PC card (detalhes) ───────────────────────────────────
+  // ── PC card ──────────────────────────────────────────────
   pcCard: {
     backgroundColor: '#fff', borderRadius: 14, padding: 14,
     marginBottom: 20, gap: 8,
@@ -915,6 +1286,56 @@ const styles = StyleSheet.create({
   pcRow:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
   pcRowText:{ fontSize: 12, color: '#475569', flex: 1 },
   pcDesc:   { fontSize: 12, color: '#64748B', lineHeight: 17 },
+  rejeitadoBadge: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: '#FEE2E2', borderRadius: 8, padding: 8,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  rejeitadoText: { flex: 1, fontSize: 12, color: '#DC2626', lineHeight: 16 },
+
+  // ── Eventos pendentes ────────────────────────────────────
+  eventoCard: {
+    backgroundColor: '#fff', borderRadius: 12, marginBottom: 8,
+    flexDirection: 'row', overflow: 'hidden',
+    elevation: 1, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4,
+  },
+  eventoCardAccent: { width: 4, backgroundColor: '#C2410C' },
+  eventoCardBody:   { flex: 1, padding: 12, gap: 10 },
+  eventoCardTitulo: { fontSize: 14, fontWeight: '700', color: '#1E293B' },
+  eventoCardData:   { fontSize: 11, color: '#94A3B8' },
+  eventoCardBtns:   { flexDirection: 'row', gap: 8 },
+  eventoAceitarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#22C55E', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  eventoRecusarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEE2E2', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  eventoBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+
+  // ── Doações ──────────────────────────────────────────────
+  doacaoCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    elevation: 1, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4,
+  },
+  doacaoInfo:  { flex: 1 },
+  doacaoTipo:  { fontSize: 14, fontWeight: '700', color: '#1E293B' },
+  doacaoQtd:   { fontSize: 12, color: '#64748B', marginTop: 2 },
+  doacaoDesc:  { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  doacaoData:  { fontSize: 11, color: '#64748B', marginTop: 2 },
+  receberBtn: {
+    backgroundColor: '#EDE9FE', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: '#C4B5FD',
+  },
+  receberBtnText: { fontSize: 12, fontWeight: '700', color: '#7C3AED' },
 
   // ── Cabeçalho de seção ───────────────────────────────────
   sectionHeader: {
@@ -941,9 +1362,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4,
   },
   estoqueNome: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1E293B' },
-  estoqueControls: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-  },
+  estoqueControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   qtdBtn: {
     width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
     backgroundColor: '#EFF6FF',
@@ -963,20 +1382,17 @@ const styles = StyleSheet.create({
   },
   demandaAccent: { width: 4 },
   demandaBody:   { flex: 1, padding: 12, gap: 6 },
-  demandaTop: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-  },
+  demandaTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   demandaBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   demandaBadgeText: { fontSize: 11, fontWeight: '700' },
   demandaQtd:  { flex: 1, fontSize: 12, color: '#64748B', fontWeight: '600' },
   demandaNome: { fontSize: 14, fontWeight: '700', color: '#1E293B' },
   demandaDesc: { fontSize: 12, color: '#64748B', lineHeight: 17 },
-  progressBar: {
-    height: 5, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden',
-  },
+  demandaIntencionada: { fontSize: 11, color: '#7C3AED', fontWeight: '600' },
+  progressBar: { height: 5, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 3 },
 
-  // ── Info box (sem eventos) ───────────────────────────────
+  // ── Info box ─────────────────────────────────────────────
   infoBox: {
     flexDirection: 'row', alignItems: 'center', gap: 7,
     backgroundColor: '#F8FAFC', borderRadius: 10,
@@ -1013,9 +1429,7 @@ const styles = StyleSheet.create({
     borderRadius: 10, marginBottom: 4, backgroundColor: '#F8FAFC',
     borderWidth: 1, borderColor: '#E2E8F0',
   },
-  tipoItemSelected: {
-    backgroundColor: '#EFF6FF', borderColor: Colors.blue.dark,
-  },
+  tipoItemSelected: { backgroundColor: '#EFF6FF', borderColor: Colors.blue.dark },
   tipoNome: { fontSize: 14, color: '#334155', flex: 1, marginRight: 8 },
 
   fieldLabel: { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 6 },
@@ -1027,7 +1441,6 @@ const styles = StyleSheet.create({
   },
   textArea: { height: 72, textAlignVertical: 'top' },
 
-  // Prioridade
   prioridadeRow: { flexDirection: 'row', gap: 6, marginBottom: 14 },
   prioBtn: {
     flex: 1, alignItems: 'center', paddingVertical: 8,
@@ -1036,15 +1449,13 @@ const styles = StyleSheet.create({
   },
   prioBtnText: { fontSize: 11, fontWeight: '700', color: '#64748B' },
 
-  // Confirm
   confirmBtn: {
     backgroundColor: Colors.blue.dark, borderRadius: 14,
     paddingVertical: 14, alignItems: 'center', marginTop: 8,
   },
   confirmBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
-  // Chips de resumo (passo detalhes)
-  chipRow:      { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
+  chipRow:     { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   summaryChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: '#EFF6FF', borderRadius: 20,
@@ -1054,7 +1465,14 @@ const styles = StyleSheet.create({
   },
   summaryChipText: { fontSize: 12, fontWeight: '600', color: Colors.blue.dark, flex: 1 },
 
-  // Voltar
   backBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10 },
   backBtnText: { fontSize: 12, color: '#64748B' },
+
+  // ── Erro inline em modal ─────────────────────────────────
+  modalErrorBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 7,
+    backgroundColor: '#FEE2E2', borderRadius: 10, padding: 10, marginBottom: 8,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  modalErrorText: { flex: 1, fontSize: 12, color: '#DC2626', lineHeight: 17 },
 });

@@ -39,8 +39,9 @@ public class ZonaRiscoService {
     @Transactional
     public ZonaRiscoDTO criar(ZonaRiscoRequest req) {
         Usuario u = currentUser.require();
+        var tenant = tenantScope.effectiveTenant(u);
         ZonaRisco z = new ZonaRisco();
-        z.setTenant(u.getTenant());
+        z.setTenant(tenant);
         z.setCadastradoPor(u);
         aplicar(z, req);
         repository.save(z);
@@ -51,7 +52,7 @@ public class ZonaRiscoService {
             }
         }
         applicationEventPublisher.publishEvent(
-                new ZonaRiscoCriadaEvent(z.getId(), u.getTenant().getId(), u.getId()));
+                new ZonaRiscoCriadaEvent(z.getId(), tenant.getId(), u.getId()));
         return ZonaRiscoDTO.from(z);
     }
 

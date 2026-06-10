@@ -29,7 +29,7 @@ public class HospitalService {
     public HospitalDTO criar(HospitalRequest req) {
         Usuario u = currentUser.require();
         Hospital h = new Hospital();
-        h.setTenant(u.getTenant());
+        h.setTenant(tenantScope.effectiveTenant(u));
         aplicar(h, req);
         return HospitalDTO.from(hospitalRepository.save(h));
     }
