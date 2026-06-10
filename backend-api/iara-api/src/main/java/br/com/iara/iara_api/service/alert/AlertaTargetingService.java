@@ -89,6 +89,10 @@ public class AlertaTargetingService {
                     result.add(u.getId());
                 }
             }
+            // Monitores sem localização — não excluir por não terem compartilhado GPS
+            for (Usuario u : usuarioRepository.aprovadosPorTenantsERole(List.of(tenantId), "MONITOR")) {
+                if (u.getLocalizacao() == null) result.add(u.getId());
+            }
         }
         return result;
     }
@@ -148,6 +152,10 @@ public class AlertaTargetingService {
                 for (Usuario u : usuarioRepository.usuariosFrequentesNo(lat, lng, raio, minDays, lastDays, List.of(tenantId))) {
                     result.add(u.getId());
                 }
+            }
+            // Monitores sem localização — não excluir por não terem compartilhado GPS
+            for (Usuario u : usuarioRepository.aprovadosPorTenantsERole(List.of(tenantId), "MONITOR")) {
+                if (u.getLocalizacao() == null) result.add(u.getId());
             }
         }
         return result;

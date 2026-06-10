@@ -44,6 +44,7 @@ export interface TokenResponse {
   tokenType: string;
   accessExpiresAt: number;
   userId: string;
+  tenantId: string;
   email: string;
   role: Role;
 }

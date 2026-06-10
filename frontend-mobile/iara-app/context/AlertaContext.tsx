@@ -104,6 +104,7 @@ interface AlertaContextValue {
   floatingAlert: AlertaDTO | null;
   notificationCount: number;
   isLoading: boolean;
+  lastAlertAt: number;
   dismissPopup: () => void;
   dismissAndClearFloating: () => void;
   showAlertPopup: (alerta: AlertaDTO) => void;
@@ -117,6 +118,7 @@ const AlertaContext = createContext<AlertaContextValue>({
   floatingAlert: null,
   notificationCount: 0,
   isLoading: false,
+  lastAlertAt: 0,
   dismissPopup: () => {},
   dismissAndClearFloating: () => {},
   showAlertPopup: () => {},
@@ -131,12 +133,13 @@ export function useAlerta() {
 // ── Provider ──────────────────────────────────────────────────
 
 export function AlertaProvider({ children }: { children: React.ReactNode }) {
-  const { accessToken } = useAuth();
+  const { accessToken, tenantId } = useAuth();
 
   const [alertas, setAlertas]           = useState<AlertaDTO[]>([]);
   const [pendingPopup, setPendingPopup] = useState<AlertaDTO | null>(null);
   const [floatingAlert, setFloatingAlert] = useState<AlertaDTO | null>(null);
   const [isLoading, setIsLoading]       = useState(false);
+  const [lastAlertAt, setLastAlertAt]   = useState(0);
 
   // IDs que já foram exibidos no popup nesta sessão
   const seenIds = useRef<Set<string>>(new Set());
@@ -203,7 +206,8 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
         });
         const isNew =
           POPUP_SEVERIDADES.has(alerta.severidade) &&
-          !seenIds.current.has(alerta.id);
+          !seenIds.current.has(alerta.id) &&
+          !popupQueue.current.some((a) => a.id === alerta.id);
         if (isNew) {
           popupQueue.current.push(alerta);
           setPendingPopup((curr) => curr ?? popupQueue.current.shift() ?? null);
@@ -217,12 +221,14 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
             return sev <= SEV_ORDER[curr.severidade] ? topFloat : curr;
           });
         }
+        setLastAlertAt(Date.now());
       } catch {}
     } else if (payload.type === 'ALERT_STATUS_CHANGED') {
       const terminal = new Set(['RESOLVED', 'CANCELLED', 'EXPIRED', 'SUPERSEDED']);
       if (payload.status && terminal.has(payload.status)) {
         setAlertas((prev) => prev.filter((a) => a.id !== payload.id));
         setFloatingAlert((curr) => (curr?.id === payload.id ? null : curr));
+        setLastAlertAt(Date.now());
       } else {
         try {
           const res = await api.get<AlertaDTO>(`/alertas/${payload.id}`, {
@@ -232,18 +238,20 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
             const filtered = prev.filter((a) => a.id !== res.data.id);
             return [...filtered, res.data].sort(sortBySeveridade);
           });
+          setLastAlertAt(Date.now());
         } catch {}
       }
     }
   }, [accessToken]);
 
-  // Carrega estado inicial uma vez e conecta WebSocket para receber pushes em tempo real
+  // Carrega estado inicial e (re)conecta WebSocket quando token ou tenant muda
   useEffect(() => {
     if (!accessToken) return;
     fetchAlertas();
-    connectAlertaSocket(WS_URL, accessToken, handleSocketMessage);
+    connectAlertaSocket(WS_URL, accessToken, tenantId, handleSocketMessage);
     return () => disconnectAlertaSocket();
-  }, [accessToken, fetchAlertas, handleSocketMessage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, tenantId]);
 
   function dismissPopup() {
     if (!pendingPopup) return;
@@ -290,6 +298,7 @@ export function AlertaProvider({ children }: { children: React.ReactNode }) {
       floatingAlert,
       notificationCount,
       isLoading,
+      lastAlertAt,
       dismissPopup,
       dismissAndClearFloating,
       showAlertPopup,
