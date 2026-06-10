@@ -7,6 +7,7 @@ import { EventosPage } from '@/pages/Eventos/EventosPage';
 import { EventoDetailPage } from '@/pages/Eventos/EventoDetailPage';
 import { MapaPage } from '@/pages/Mapa/MapaPage';
 import { PontosColetaPage } from '@/pages/PontosColeta/PontosColetaPage';
+import { MeuPcPage } from '@/pages/MeuPc/MeuPcPage';
 import { AbrigosPage } from '@/pages/Abrigos/AbrigosPage';
 import { TenantsPage } from '@/pages/Tenants/TenantsPage';
 import { HospitaisPage } from '@/pages/Hospitais/HospitaisPage';
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
           { path: 'mapa', element: <MapaPage /> },
           { path: 'prevencao', element: <PrevencaoPage /> },
           { path: 'pontos-coleta', element: <PontosColetaPage /> },
+          { path: 'meu-pc', element: <MeuPcPage /> },
           { path: 'abrigos', element: <AbrigosPage /> },
           { path: 'hospitais', element: <HospitaisPage /> },
           { path: 'pontos-apoio', element: <PontosApoioPage /> },

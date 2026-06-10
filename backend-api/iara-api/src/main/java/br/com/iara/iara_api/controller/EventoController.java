@@ -59,19 +59,19 @@ public class EventoController {
     }
 
     @PatchMapping("/{id}/aprovar")
-    @PreAuthorize("hasRole('GESTOR')")
+    @PreAuthorize("hasAnyRole('GESTOR','ADMIN')")
     public EventoDTO aprovar(@PathVariable UUID id) {
         return service.aprovar(id);
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('GESTOR')")
+    @PreAuthorize("hasAnyRole('GESTOR','ADMIN')")
     public EventoDTO mudarStatus(@PathVariable UUID id, @Valid @RequestBody StatusRequest req) {
         return service.mudarStatus(id, req);
     }
 
     @PatchMapping("/{id}/cancelar")
-    @PreAuthorize("hasRole('GESTOR')")
+    @PreAuthorize("hasAnyRole('GESTOR','ADMIN')")
     public EventoDTO cancelar(@PathVariable UUID id, @RequestBody(required = false) Map<String, String> body) {
         return service.cancelar(id, body != null ? body.get("observacao") : null);
     }
