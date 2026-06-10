@@ -57,6 +57,7 @@ const groups: NavGroup[] = [
     eyebrow: 'Infraestrutura',
     items: [
       { href: '/pontos-coleta', icon: Package, label: 'Pontos de Coleta' },
+      { href: '/meu-pc', icon: Package, label: 'Meu PC' },
       { href: '/abrigos', icon: Home, label: 'Abrigos' },
       { href: '/hospitais', icon: Cross, label: 'Hospitais' },
       { href: '/pontos-apoio', icon: LifeBuoy, label: 'Pontos de Apoio' },

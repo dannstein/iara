@@ -187,10 +187,13 @@ export interface FideDTO {
   fideStatus: FideStatus;
 }
 
+export type PcStatusVerificacao = 'PENDENTE_VERIFICACAO_GESTOR' | 'VERIFICADO' | 'REJEITADO';
+
 export interface PcDTO {
   id: string;
   tenantId: string;
   coordenadorId: string;
+  enderecoId: string | null;
   pcNome: string;
   pcTipo: PcTipo;
   coordenadas: Coordenadas;
@@ -198,7 +201,11 @@ export interface PcDTO {
   pcContato: string | null;
   pcIsVerified: boolean;
   isActive: boolean;
+  statusVerificacao: PcStatusVerificacao;
+  motivoRejeicao: string | null;
 }
+
+export type DemandaStatus = 'OPEN' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CLOSED';
 
 export interface DemandaDTO {
   id: string;
@@ -211,6 +218,12 @@ export interface DemandaDTO {
   qtdAtendida: number;
   descricao: string | null;
   isActive: boolean;
+  status: DemandaStatus;
+  qtdRecebida: number;
+  qtdIntencionada: number;
+  qtdMaximaCapacidade: number | null;
+  dataFechamento: string | null;
+  idUsuFechou: string | null;
 }
 
 export interface EstoqueDTO {
@@ -218,6 +231,125 @@ export interface EstoqueDTO {
   idTipo: string;
   tipoNome: string;
   quantidade: number;
+}
+
+// ---- Fase 4: PC lifecycle + workers + doações + auditoria ----
+
+export type PcEventoStatus = 'NOTIFICADO' | 'ACEITO' | 'RECUSADO';
+
+export interface PcEventoDTO {
+  id: string;
+  pcId: string;
+  eventoId: string;
+  status: PcEventoStatus;
+  dataNotificacao: string;
+  dataResposta: string | null;
+}
+
+export interface MotivoRecusaDTO {
+  id: string;
+  codigo: string;
+  label: string;
+  exigeDescricao: boolean;
+}
+
+export type WorkerDisponibilidadeStatus =
+  | 'PENDENTE'
+  | 'CONFIRMADA'
+  | 'RECUSADA'
+  | 'EXPIRADA';
+
+export interface WorkerDisponibilidadeDTO {
+  id: string;
+  pcEventoId: string;
+  pcId: string;
+  eventoId: string;
+  usuarioId: string;
+  usuarioNome: string;
+  status: WorkerDisponibilidadeStatus;
+  idMotivoRecusa: string | null;
+  motivoCodigo: string | null;
+  motivoLabel: string | null;
+  motivoDescricao: string | null;
+  dataSolicitacao: string;
+  dataResposta: string | null;
+}
+
+export interface CapacidadeDTO {
+  pcId: string;
+  idTipo: string;
+  tipoNome: string;
+  qtdMaxima: number;
+  alteradoPor: string | null;
+  updatedAt: string;
+}
+
+export type DoacaoStatus = 'PENDENTE' | 'CONFIRMADA' | 'CANCELADA' | 'EXPIRADA';
+
+export interface DoacaoDTO {
+  id: string;
+  usuarioId: string;
+  pcId: string;
+  demandaId: string;
+  idTipo: string;
+  quantidade: number;
+  descricao: string | null;
+  status: DoacaoStatus;
+  pdrReferencia: string | null;
+  dataPrevista: string | null;
+  dataConfirmacao: string | null;
+  qtdRecebida: number;
+  dataExpiracao: string | null;
+}
+
+export type InventoryOperacao =
+  | 'INTENT_CREATED'
+  | 'INTENT_CANCELLED'
+  | 'INTENT_EXPIRED'
+  | 'RECEIVED'
+  | 'DISTRIBUTED'
+  | 'ADJUSTED'
+  | 'RESET_END_EVENT';
+
+export interface InventoryTransactionDTO {
+  id: string;
+  pcId: string;
+  eventoId: string;
+  idTipo: string;
+  operacao: InventoryOperacao;
+  quantidade: number;
+  usuarioId: string;
+  intencaoId: string | null;
+  demandaId: string | null;
+  observacao: string | null;
+  createdAt: string;
+}
+
+export interface PcAuditLogDTO {
+  id: string;
+  pcId: string;
+  eventoId: string | null;
+  atorId: string;
+  acao: string;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface HelperDTO {
+  id: string;
+  usuarioId: string;
+  pcId: string;
+  iniciadoPor: string;
+  status: 'PENDENTE' | 'CONFIRMADO' | 'RECUSADO' | 'ENCERRADO';
+  isActive: boolean;
+}
+
+export interface SpringPage<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
 }
 
 export interface AbrigoDTO {

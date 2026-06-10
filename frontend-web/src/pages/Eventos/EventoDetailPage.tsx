@@ -8,6 +8,7 @@ import {
   MapPin,
   Clock,
   CircleAlert,
+  CheckCircle2,
   Plus,
   Users,
   HeartPulse,
@@ -38,6 +39,7 @@ import {
   useRegistrarIncidentes,
   useAprovarEvento,
   useCancelarEvento,
+  useMudarStatusEvento,
   useValidarFide,
   useAtualizarFide,
   useSubmeterFide,
@@ -66,10 +68,13 @@ export function EventoDetailPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('Visão Geral');
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [encerrarOpen, setEncerrarOpen] = useState(false);
+  const [encerrarObs, setEncerrarObs] = useState('');
 
   const { data: evento, isLoading, isError } = useEvento(id);
   const aprovar = useAprovarEvento();
   const cancelar = useCancelarEvento();
+  const mudarStatus = useMudarStatusEvento();
   const role = useAuthStore((s) => s.user?.role);
   const isGestor = hasRole(role, 'GESTOR');
 
@@ -95,6 +100,27 @@ export function EventoDetailPage() {
       },
     );
   }
+
+  function handleEncerrar() {
+    mudarStatus.mutate(
+      {
+        id: evento!.id,
+        status: 'ENCERRADO',
+        observacao: encerrarObs.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Evento encerrado. Removido do mapa e dos alertas ativos.');
+          setEncerrarOpen(false);
+          setEncerrarObs('');
+        },
+        onError: (e) => toast.error(apiErrorMessage(e)),
+      },
+    );
+  }
+
+  const podeEncerrar =
+    isGestor && (evento.status === 'ATIVO' || evento.status === 'ALERTA_CRITICO');
 
   return (
     <div>
@@ -138,6 +164,11 @@ export function EventoDetailPage() {
                   <Ban size={15} /> Cancelar
                 </Button>
               </>
+            )}
+            {podeEncerrar && (
+              <Button onClick={() => setEncerrarOpen(true)}>
+                <CheckCircle2 size={15} /> Encerrar
+              </Button>
             )}
             <Link to={`/mapa?evento=${evento.id}`}>
               <Button variant="secondary">
@@ -196,6 +227,38 @@ export function EventoDetailPage() {
           Tem certeza que deseja cancelar <strong className="text-ink-primary">{evento.titulo}</strong>?
           Só é possível cancelar eventos em estado SOLICITADO.
         </p>
+      </Modal>
+
+      <Modal
+        open={encerrarOpen}
+        onClose={() => setEncerrarOpen(false)}
+        title="Encerrar evento"
+        eyebrow="Conclusão da operação"
+        icon={<CheckCircle2 size={16} />}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEncerrarOpen(false)}>
+              Voltar
+            </Button>
+            <Button onClick={handleEncerrar} loading={mudarStatus.isPending}>
+              Confirmar encerramento
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-[13px] text-ink-secondary">
+          Ao encerrar <strong className="text-ink-primary">{evento.titulo}</strong>, o evento será removido
+          do mapa e dos alertas ativos. Estoques de PCs vinculados são zerados e demandas pendentes
+          são fechadas automaticamente.
+        </p>
+        <label className="form-label mb-1.5 block">Observação (opcional)</label>
+        <textarea
+          rows={3}
+          value={encerrarObs}
+          onChange={(e) => setEncerrarObs(e.target.value)}
+          placeholder="Ex.: Operação concluída — 12 famílias atendidas."
+          className="input w-full"
+        />
       </Modal>
     </div>
   );
