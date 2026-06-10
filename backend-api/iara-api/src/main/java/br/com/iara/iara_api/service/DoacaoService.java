@@ -50,6 +50,7 @@ public class DoacaoService {
     private final PcService pcService;
     private final DemandaService demandaService;
     private final br.com.iara.iara_api.service.outbox.OutboxPublisher outbox;
+    private final PcAuditService audit;
     private final CurrentUser currentUser;
     private final NotificationPublisher notificationPublisher;
 
@@ -109,6 +110,12 @@ public class DoacaoService {
                         "usuarioId", u.getId().toString(),
                         "quantidade", req.quantidade()
                 ));
+        audit.log(pc.getId(), demanda.getEvento().getId(), u.getId(),
+                PcAuditService.DONATION_INTENT_CREATED,
+                java.util.Map.of(
+                        "intencaoId", d.getId().toString(),
+                        "demandaId", demanda.getId().toString(),
+                        "quantidade", req.quantidade()));
         return DoacaoDTO.from(d);
     }
 
@@ -135,6 +142,12 @@ public class DoacaoService {
         PcDemanda demanda = d.getDemanda();
         demanda.setQtdIntencionada(Math.max(0, demanda.getQtdIntencionada() - d.getQuantidade()));
         registrar("INTENT_CANCELLED", d.getPc(), demanda, d.getTipo(), d.getQuantidade(), d, u, null);
+        audit.log(d.getPc().getId(), demanda.getEvento().getId(), u.getId(),
+                PcAuditService.DONATION_INTENT_CANCELLED,
+                java.util.Map.of(
+                        "intencaoId", d.getId().toString(),
+                        "demandaId", demanda.getId().toString(),
+                        "quantidade", d.getQuantidade()));
         return DoacaoDTO.from(d);
     }
 
@@ -203,6 +216,12 @@ public class DoacaoService {
                         "tipoId", d.getTipo().getId().toString(),
                         "qtdRecebida", qtdRecebida
                 ));
+        audit.log(d.getPc().getId(), demanda.getEvento().getId(), actor.getId(),
+                PcAuditService.DONATION_RECEIVED,
+                java.util.Map.of(
+                        "intencaoId", d.getId().toString(),
+                        "demandaId", demanda.getId().toString(),
+                        "qtdRecebida", qtdRecebida));
         return DoacaoDTO.from(d);
     }
 
@@ -231,6 +250,13 @@ public class DoacaoService {
                         "quantidade", quantidade,
                         "saldo", est.getQuantidade()
                 ));
+        audit.log(pc.getId(), null, actor.getId(),
+                PcAuditService.STOCK_DISTRIBUTED,
+                java.util.Map.of(
+                        "tipoId", tipo.getId().toString(),
+                        "quantidade", quantidade,
+                        "saldo", est.getQuantidade(),
+                        "observacao", observacao == null ? "" : observacao));
     }
 
     /** Ajuste manual de estoque. */
@@ -258,6 +284,13 @@ public class DoacaoService {
                         "quantidade", delta,
                         "saldo", est.getQuantidade()
                 ));
+        audit.log(pc.getId(), null, actor.getId(),
+                PcAuditService.STOCK_ADJUSTED,
+                java.util.Map.of(
+                        "tipoId", tipo.getId().toString(),
+                        "delta", delta,
+                        "saldo", est.getQuantidade(),
+                        "observacao", observacao == null ? "" : observacao));
     }
 
     // ============================================================================
@@ -309,6 +342,12 @@ public class DoacaoService {
                                 pc.getCoordenador(),
                                 "Evento encerrado (" + e.motivo() + "); estoque zerado");
                         est.setQuantidade(0);
+                        audit.log(pc.getId(), eventoId, pc.getCoordenador().getId(),
+                                PcAuditService.EVENT_INVENTORY_RESET,
+                                java.util.Map.of(
+                                        "tipoId", est.getTipo().getId().toString(),
+                                        "quantidade", antes,
+                                        "motivo", e.motivo()));
                     }
                 });
             }

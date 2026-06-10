@@ -29,6 +29,7 @@ public class DemandaService {
     private final PcCapacidadeRepository capacidadeRepository;
     private final HelperRepository helperRepository;
     private final br.com.iara.iara_api.service.outbox.OutboxPublisher outbox;
+    private final PcAuditService audit;
     private final PcService pcService;
     private final CurrentUser currentUser;
 
@@ -82,6 +83,12 @@ public class DemandaService {
                         "qtdSolicitada", saved.getQtdSolicitada(),
                         "prioridade", saved.getPrioridade()
                 ));
+        audit.log(pcId, evento.getId(), currentUser.id(),
+                PcAuditService.DEMAND_CREATED,
+                java.util.Map.of(
+                        "demandaId", saved.getId().toString(),
+                        "tipoId", tipo.getId().toString(),
+                        "qtdSolicitada", saved.getQtdSolicitada()));
         return DemandaDTO.from(saved);
     }
 
@@ -106,6 +113,9 @@ public class DemandaService {
                         "pcId", d.getPc().getId().toString(),
                         "eventoId", d.getEvento().getId().toString()
                 ));
+        audit.log(d.getPc().getId(), d.getEvento().getId(), currentUser.id(),
+                PcAuditService.DEMAND_CLOSED,
+                java.util.Map.of("demandaId", d.getId().toString()));
         return DemandaDTO.from(d);
     }
 
