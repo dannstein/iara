@@ -29,7 +29,7 @@ public class AbastecimentoService {
     public AbastecimentoDTO criar(AbastecimentoRequest req) {
         Usuario u = currentUser.require();
         LocalAbastecimento l = new LocalAbastecimento();
-        l.setTenant(u.getTenant());
+        l.setTenant(tenantScope.effectiveTenant(u));
         aplicar(l, req);
         return AbastecimentoDTO.from(repository.save(l));
     }

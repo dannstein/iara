@@ -34,9 +34,7 @@ export default function PontosApoioScreen() {
   const fetchData = useCallback(async (force = false) => {
     if (!accessToken) return;
     try {
-      const data = force
-        ? (await api.get<PontoApoioDTO[]>('/pontos-apoio', { headers })).data
-        : await apiCached<PontoApoioDTO[]>('/pontos-apoio', headers, TTL.pontos);
+      const data = await apiCached<PontoApoioDTO[]>('/pontos-apoio', headers, TTL.pontos);
       setPontos(data.filter((p) => p.isActive));
     } catch {} finally {
       setLoading(false); setRefreshing(false);

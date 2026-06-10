@@ -60,9 +60,7 @@ export default function HistoricoDoacoes() {
   const fetchDoacoes = useCallback(async (force = false) => {
     if (!accessToken) return;
     try {
-      const data = force
-        ? (await api.get<DoacaoDTO[]>('/doacoes/minhas', { headers })).data
-        : await apiCached<DoacaoDTO[]>('/doacoes/minhas', headers, TTL_CURTO);
+      const data = await apiCached<DoacaoDTO[]>('/doacoes/minhas', headers, TTL_CURTO);
       setDoacoes(data);
     } catch {
       // mantém dados em cache

@@ -1,160 +1,174 @@
-import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
-import { Link, router } from "expo-router";
-import { useState } from "react";
-import { Colors } from '../constants/theme';
-import { useAuth } from '../context/AuthContext';
-
-// Importações novas para ligar com a API
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { api } from '../services/api';
+import { useState } from 'react';
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+
+import { Input } from '@/components/Input';
+import { Button } from '@/components/Button';
 import { useAppModal } from '../components/AppModal';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
+import { Colors } from '../constants/theme';
 
-export default function Index(){
-    const { refresh } = useAuth();
-    const { show, modal } = useAppModal();
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
+export default function Index() {
+  const { refresh } = useAuth();
+  const { show, modal } = useAppModal();
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [loading,  setLoading]  = useState(false);
 
-    // Corrigi o nome da função para o padrão handleSignIn
-    async function handleSignIn(){
-        // 1. Validação básica antes de chamar o servidor
-        if (!email || !password) {
-            show({ type: 'warning', title: 'Atenção', message: 'Preencha o e-mail e a senha.' });
-            return;
-        }
-
-        try {
-            // 2. Chamada para a rota exata do Handout
-            const response = await api.post('/auth/mobile/login', {
-                email: email,
-                senha: password // Traduzindo para o formato que o Spring Boot espera
-            });
-
-            // 3. Extrai os dados do TokenResponse
-            const { accessToken, role } = response.data;
-
-            // 4. Salva o token no cofre do dispositivo
-            await SecureStore.setItemAsync('accessToken', accessToken);
-
-            // Salva os dados do usuário para poder mostrar nome/cargo nas outras telas
-            await SecureStore.setItemAsync('userData', JSON.stringify(response.data));
-
-            console.log(`Login realizado com sucesso! Perfil: ${role}`);
-
-            // 5. Atualiza o AuthContext com o role recém salvo antes de navegar
-            await refresh();
-            // Aguarda o React processar o setState do refresh antes de navegar,
-            // evitando que as tabs renderizem com role=null (bug aba Report).
-            await new Promise<void>((r) => setTimeout(r, 150));
-
-            // 6. Redireciona para as abas logadas
-            router.replace("/(tabs)/home");
-
-        } catch (error: any) {
-            // 6. Tratamento de erro padronizado pelo Handout
-            console.log("Erro da API:", error.response?.data);
-            
-            const mensagemErro = error.response?.data?.mensagem || "Não foi possível conectar ao servidor.";
-            show({ type: 'error', title: 'Erro no Login', message: mensagemErro });
-        }
+  async function handleSignIn() {
+    if (!email || !password) {
+      show({ type: 'warning', title: 'Atenção', message: 'Preencha o e-mail e a senha.' });
+      return;
     }
-    
-    return(
-        <KeyboardAvoidingView 
-            style={{flex:1}}
-            behavior={Platform.select({ios: "padding", android:"height"})}
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/mobile/login', { email, senha: password });
+      const { accessToken, role } = response.data;
+
+      await SecureStore.setItemAsync('accessToken', accessToken);
+      await SecureStore.setItemAsync('userData', JSON.stringify(response.data));
+
+      await refresh();
+      await new Promise<void>((r) => setTimeout(r, 150));
+      router.replace('/(tabs)/home');
+    } catch (error: any) {
+      const msg = error.response?.data?.mensagem ?? 'Não foi possível conectar ao servidor.';
+      show({ type: 'error', title: 'Erro no Login', message: msg });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {modal}
+      <StatusBar style="light" backgroundColor={Colors.blue.dark} />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.select({ ios: 'padding', android: 'height' })}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          style={styles.scrollView}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-            <ScrollView contentContainerStyle={{flexGrow:1}} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                <View style={styles.container}>
-                    {modal}
-                    <View style={styles.header}>
-                        <Image 
-                            source={require("@/assets/images/logo.png")}
-                            style={styles.ilustration}
-                        />
-                        <Text style={styles.iara}>IARA</Text>
-                    </View>
+          {/* ── Área azul — marca ── */}
+          <View style={styles.hero}>
+            <Image
+              source={require('@/assets/images/logo.png')}
+              style={styles.logo}
+            />
+            <Text style={styles.brand}>IARA</Text>
+            <Text style={styles.tagline}>Sistema de Gestão de Desastres</Text>
+          </View>
 
-                    <View style={styles.loginSection}>
-                        
-                        <View style={styles.form}>
-                            <Input 
-                                placeholder="E-mail"
-                                keyboardType="email-address"
-                                autoCapitalize="none" // Evita que o celular coloque a primeira letra maiúscula no e-mail
-                                onChangeText={setEmail}
-                            />
-                            <Input
-                                placeholder="Senha"
-                                secureTextEntry
-                                onChangeText={setPassword}
-                            />
-                            {/* Vinculando o botão à função real de login */}
-                            <Button label="Entrar" onPress={handleSignIn}/>
-                            
-                            <Text style={styles.footerText}> 
-                                Não tem uma conta? {" "}
-                                <Link href="/triagem" style={styles.footerLink}>Cadastre-se aqui.</Link>
-                            </Text>
-                        </View>
-                    </View>
+          {/* ── Card branco — formulário ── */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Acesse sua conta</Text>
+            <Text style={styles.cardSubtitle}>Entre com suas credenciais para continuar</Text>
 
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
-    )
+            <View style={styles.form}>
+              <Input
+                placeholder="E-mail"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                onChangeText={setEmail}
+              />
+              <Input
+                placeholder="Senha"
+                secureTextEntry
+                onChangeText={setPassword}
+              />
+              <Button
+                label={loading ? 'Entrando...' : 'Entrar'}
+                onPress={handleSignIn}
+              />
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Não tem uma conta? </Text>
+              <TouchableOpacity onPress={() => router.push('/triagem' as never)} activeOpacity={0.7}>
+                <Text style={styles.footerLink}>Cadastre-se aqui.</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#FEFEFE",
-        padding: 32,
-        justifyContent: "space-between", 
-    },
-    header: {
-        alignItems: "center", 
-        marginTop: 40,
-        marginBottom: 10, 
-    },
-    ilustration: {
-        width: 140, 
-        height: 140,
-        resizeMode: "center"
-    },
-    iara: {   
-        color: Colors.brand.orange,
-        fontSize: 48, 
-        fontWeight: "900",
-    },
-    loginSection: {
-        flex: 1, 
-        justifyContent: "flex-start",
-    },
-    title: {
-        fontSize: 32,
-        fontWeight: "800",
-        color: "#082B97" 
-    },
-    subtitle: {
-        fontSize: 16,
-        color: "#5e5e5e",
-        marginTop: 8,
-    },
-    form: {
-        marginTop: 32,
-        gap: 16, 
-    },
-    footerText: {
-        textAlign: "center",
-        marginTop: 10,
-        marginBottom: 10,
-        color: "#5e5e5e"
-    },
-    footerLink: {
-        color: "#2F9FF2",
-        fontWeight: "700",
-    },
+  safe:       { flex: 1, backgroundColor: Colors.blue.dark },
+  flex:       { flex: 1 },
+  scrollView: { backgroundColor: '#fff' },
+  scroll:     { flexGrow: 1 },
+
+  // Área azul
+  hero: {
+    backgroundColor: Colors.blue.dark,
+    alignItems: 'center',
+    paddingTop: 48,
+    paddingBottom: 40,
+    gap: 4,
+  },
+  logo: {
+    width: 110,
+    height: 110,
+    resizeMode: 'contain',
+  },
+  brand: {
+    fontSize: 52,
+    fontWeight: '900',
+    color: Colors.brand.orange,
+    letterSpacing: 4,
+    marginTop: 4,
+  },
+  tagline: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.65)',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+
+  // Card branco
+  card: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    paddingBottom: 40,
+    minHeight: 420,
+  },
+  cardTitle:    { fontSize: 24, fontWeight: '800', color: Colors.blue.dark },
+  cardSubtitle: { fontSize: 14, color: '#64748B', marginTop: 4, marginBottom: 8 },
+
+  form: { marginTop: 24, gap: 14 },
+
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  footerText: { fontSize: 14, color: '#64748B' },
+  footerLink: { fontSize: 14, fontWeight: '700', color: Colors.blue.medium },
 });

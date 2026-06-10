@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../services/api';
+import { setOffline } from './offlineState';
 
 interface CacheEntry<T> {
   data: T;
@@ -49,11 +50,15 @@ export async function apiCached<T>(
     // Sempre busca na rede — dados sempre frescos quando online
     const response = await api.get<T>(endpoint, { headers });
     await setCached(cacheKey, response.data);   // armazena para uso offline
+    setOffline(false);                          // sinaliza que estamos online
     return response.data;
   } catch (err) {
     // Rede falhou → tenta cache sem limite de TTL (modo offline)
     const cached = await getCached<T>(cacheKey, Infinity);
-    if (cached !== null) return cached;
+    if (cached !== null) {
+      setOffline(true);                         // sinaliza que estamos usando cache
+      return cached;
+    }
     throw err;  // sem cache disponível, propaga o erro
   }
 }

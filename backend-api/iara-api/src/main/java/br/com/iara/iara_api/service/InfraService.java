@@ -29,7 +29,7 @@ public class InfraService {
     public InfraDTO criar(InfraRequest req) {
         Usuario u = currentUser.require();
         InfraMunicipal i = new InfraMunicipal();
-        i.setTenant(u.getTenant());
+        i.setTenant(tenantScope.effectiveTenant(u));
         aplicar(i, req);
         return InfraDTO.from(infraRepository.save(i));
     }

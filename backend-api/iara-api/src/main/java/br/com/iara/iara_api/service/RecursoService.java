@@ -37,7 +37,7 @@ public class RecursoService {
         RecursoTipo tipo = recursoTipoRepository.findById(req.idTipo())
                 .orElseThrow(() -> new NotFoundException("Tipo de recurso não encontrado"));
         RecursoDc r = new RecursoDc();
-        r.setTenant(u.getTenant());
+        r.setTenant(tenantScope.effectiveTenant(u));
         r.setTipo(tipo);
         r.setIdentificacao(req.identificacao());
         r.setDescricao(req.descricao());

@@ -58,7 +58,7 @@ public class EventoService {
                 .orElseThrow(() -> new NotFoundException("Tipo de desastre não encontrado"));
 
         Evento e = new Evento();
-        e.setTenant(u.getTenant());
+        e.setTenant(tenantScope.effectiveTenant(u));
         e.setTitulo(req.titulo());
         e.setDescricao(req.descricao());
         e.setTipo(tipo);

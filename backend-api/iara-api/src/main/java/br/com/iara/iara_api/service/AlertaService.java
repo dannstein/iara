@@ -463,7 +463,7 @@ public class AlertaService {
     public List<AlertaDTO> listar(String status, String severidade, String categoria,
                                   UUID idEvento, UUID idZonaRisco) {
         Usuario u = currentUser.require();
-        return alertaRepository.filtrar(tenantScope.visibleTenantIds(u),
+        return alertaRepository.filtrarParaDestinatario(u.getId(),
                         status, severidade, categoria, idEvento, idZonaRisco)
                 .stream().map(a -> AlertaDTO.from(a, computeSummary(a.getId()))).toList();
     }

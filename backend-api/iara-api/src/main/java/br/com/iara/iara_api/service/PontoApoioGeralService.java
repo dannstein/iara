@@ -29,7 +29,7 @@ public class PontoApoioGeralService {
     public PontoApoioGeralDTO criar(PontoApoioGeralRequest req) {
         Usuario u = currentUser.require();
         PontoApoioGeral p = new PontoApoioGeral();
-        p.setTenant(u.getTenant());
+        p.setTenant(tenantScope.effectiveTenant(u));
         p.setNome(req.nome());
         p.setDescricao(req.descricao());
         p.setGeometria(GeoUtil.point(req.coordenadas()));

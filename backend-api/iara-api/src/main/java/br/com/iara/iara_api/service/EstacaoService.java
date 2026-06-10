@@ -33,7 +33,7 @@ public class EstacaoService {
     public EstacaoDTO criar(EstacaoRequest req) {
         Usuario u = currentUser.require();
         EstacaoMonitoramento e = new EstacaoMonitoramento();
-        e.setTenant(u.getTenant());
+        e.setTenant(tenantScope.effectiveTenant(u));
         e.setNome(req.nome());
         e.setFonte(req.fonte());
         e.setCodigoExterno(req.codigoExterno());

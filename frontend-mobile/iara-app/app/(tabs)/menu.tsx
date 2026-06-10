@@ -41,9 +41,9 @@ interface MenuItem {
 // ── Tela ─────────────────────────────────────────────────────
 
 export default function Menu() {
-  const { email, role } = useAuth();
+  const { nome, email, role } = useAuth();
 
-  const displayName = email ? email.split('@')[0] : 'usuário';
+  const displayName = nome || (email ? email.split('@')[0] : 'usuário');
   const roleKey     = role ?? '';
   const roleLabel   = ROLE_LABEL[roleKey] ?? roleKey;
   const roleColor   = ROLE_COLOR[roleKey] ?? '#64748B';

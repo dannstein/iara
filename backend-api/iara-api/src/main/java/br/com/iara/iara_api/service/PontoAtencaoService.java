@@ -44,7 +44,7 @@ public class PontoAtencaoService {
                     "RN23: ponto industrial exige substância perigosa e classe de risco");
         }
         PontoAtencao p = new PontoAtencao();
-        p.setTenant(u.getTenant());
+        p.setTenant(tenantScope.effectiveTenant(u));
         p.setCadastradoPor(u);
         p.setNome(req.nome());
         p.setDescricao(req.descricao());

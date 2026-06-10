@@ -8,6 +8,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { api } from '../services/api';
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ export type UserRole =
 
 interface AuthState {
   role: UserRole;
+  nome: string;
   email: string;
   userId: string;
   tenantId: string;
@@ -38,6 +40,7 @@ interface AuthData extends AuthState {
 
 const AuthContext = createContext<AuthData>({
   role: null,
+  nome: '',
   email: '',
   userId: '',
   tenantId: '',
@@ -51,6 +54,7 @@ const AuthContext = createContext<AuthData>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     role: null,
+    nome: '',
     email: '',
     userId: '',
     tenantId: '',
@@ -66,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
 
       let role: UserRole = null;
+      let nome = '';
       let email = '';
       let userId = '';
       let tenantId = '';
@@ -74,14 +79,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = JSON.parse(rawUser);
           role     = parsed.role     ?? null;
+          nome     = parsed.nome     ?? '';
           email    = parsed.email    ?? '';
           userId   = parsed.userId   ?? '';
           tenantId = parsed.tenantId ?? '';
         } catch {}
       }
 
+      if (token) {
+        try {
+          const res = await api.get('/usuarios/me', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          nome = res.data.nome ?? nome;
+        } catch {}
+      }
+
       setState({
         role,
+        nome,
         email,
         userId,
         tenantId,

@@ -38,6 +38,21 @@ public class CurrentUser {
         return require().getTenant().getId();
     }
 
+    /**
+     * Retorna o tenantId do usuario autenticado, ou null se nao houver sessao.
+     * Usado em endpoints publicos que filtram por tenant quando disponivel
+     * (ex: GET /especialidades no fluxo de cadastro de voluntario sem token).
+     */
+    public UUID tenantIdOrNull() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) {
+            return null;
+        }
+        return usuarioRepository.findByEmail(auth.getName())
+                .map(u -> u.getTenant().getId())
+                .orElse(null);
+    }
+
     public String role() {
         return require().getRole().getRoleNome();
     }

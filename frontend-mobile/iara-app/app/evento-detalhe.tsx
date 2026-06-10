@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -72,6 +77,26 @@ interface HistoricoDTO {
   createdAt: string;
 }
 
+interface PcEventoLinkDTO {
+  id: string;
+  pcId: string;
+  eventoId: string;
+  status: 'NOTIFICADO' | 'ACEITO' | 'RECUSADO';
+}
+
+interface MotivoRecusaDTO {
+  id: string;
+  codigo: string;
+  label: string;
+  descricaoObrigatoria: boolean;
+}
+
+interface PcVinculo {
+  pcId: string;
+  pcEventoId: string;
+  status: 'NOTIFICADO' | 'ACEITO' | 'RECUSADO';
+}
+
 // ── Constantes ───────────────────────────────────────────────
 
 const SEVERITY: Record<string, { color: string; label: string }> = {
@@ -104,12 +129,9 @@ const PRIORIDADE: Record<string, { color: string; bg: string; label: string }> =
   SUPRIDA: { color: '#6B7280', bg: '#F3F4F6', label: 'Suprido'    },
 };
 
-// roles que herdam acesso de MONITOR ou superior
-const CAN_MONITOR = new Set(['MONITOR', 'GESTOR', 'ADMIN']);
-// roles com poder de gestão
-const CAN_GESTOR  = new Set(['GESTOR', 'ADMIN']);
-// roles que podem fazer check-in (TECNICO e superiores)
-const CAN_CHECKIN = new Set(['TECNICO', 'COORDENADOR', 'MONITOR', 'GESTOR', 'ADMIN']);
+const CAN_MONITOR    = new Set(['MONITOR', 'GESTOR', 'ADMIN']);
+const CAN_GESTOR     = new Set(['GESTOR', 'ADMIN']);
+const CAN_CHECKIN    = new Set(['TECNICO', 'MONITOR']);
 
 const TABS: ChipOption[] = [
   { key: 'geral',      label: 'Visão Geral' },
@@ -144,19 +166,23 @@ export default function EventoDetalhe() {
   const { accessToken, role } = useAuth();
   const { show, modal } = useAppModal();
 
-  const [evento,     setEvento    ] = useState<EventoDTO | null>(null);
-  const [incidentes, setIncidentes] = useState<IncidentesDTO | null>(null);
-  const [triagem,    setTriagem   ] = useState<TriagemDTO[]>([]);
-  const [demandas,   setDemandas  ] = useState<DemandaDTO[]>([]);
-  const [historico,  setHistorico ] = useState<HistoricoDTO[]>([]);
-  const [loading,    setLoading   ] = useState(true);
-  const [checkedIn,  setCheckedIn ] = useState(false);
-  const [activeTab,  setActiveTab ] = useState('geral');
+  const [evento,        setEvento       ] = useState<EventoDTO | null>(null);
+  const [incidentes,    setIncidentes   ] = useState<IncidentesDTO | null>(null);
+  const [triagem,       setTriagem      ] = useState<TriagemDTO[]>([]);
+  const [demandas,      setDemandas     ] = useState<DemandaDTO[]>([]);
+  const [historico,     setHistorico    ] = useState<HistoricoDTO[]>([]);
+  const [loading,       setLoading      ] = useState(true);
+  const [checkedIn,     setCheckedIn    ] = useState(false);
+  const [activeTab,     setActiveTab    ] = useState('geral');
+  const [pcVinculo,     setPcVinculo    ] = useState<PcVinculo | null>(null);
+  const [motivosRecusa, setMotivosRecusa] = useState<MotivoRecusaDTO[]>([]);
+  const [recusarOpen,   setRecusarOpen  ] = useState(false);
 
-  const headers    = useMemo(() => ({ Authorization: `Bearer ${accessToken}` }), [accessToken]);
-  const isMonitor  = CAN_MONITOR.has(role ?? '');
-  const isGestor   = CAN_GESTOR.has(role ?? '');
-  const canCheckin = CAN_CHECKIN.has(role ?? '');
+  const headers       = useMemo(() => ({ Authorization: `Bearer ${accessToken}` }), [accessToken]);
+  const isMonitor     = CAN_MONITOR.has(role ?? '');
+  const isGestor      = CAN_GESTOR.has(role ?? '');
+  const canCheckin    = CAN_CHECKIN.has(role ?? '');
+  const isCoordenador = role === 'COORDENADOR';
 
   useEffect(() => {
     if (!accessToken || !id) return;
@@ -184,6 +210,27 @@ export default function EventoDetalhe() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [accessToken, id, headers, isMonitor]);
+
+  // Carrega o vínculo PC-evento para coordenadores
+  useEffect(() => {
+    if (!isCoordenador || !accessToken || !id) return;
+    (async () => {
+      try {
+        const [meRes, motivosRes] = await Promise.all([
+          api.get('/usuarios/me', { headers }),
+          api.get('/pontos-coleta/motivos-recusa', { headers }),
+        ]);
+        const userId = meRes.data.id as string;
+        const pcsRes = await api.get('/pontos-coleta', { headers });
+        const myPc = (pcsRes.data as any[]).find((p) => p.coordenadorId === userId);
+        if (!myPc) return;
+        const pcEventosRes = await api.get(`/pontos-coleta/${myPc.id}/eventos`, { headers });
+        const link = (pcEventosRes.data as PcEventoLinkDTO[]).find((pe) => pe.eventoId === id);
+        if (link) setPcVinculo({ pcId: myPc.id, pcEventoId: link.id, status: link.status });
+        setMotivosRecusa(motivosRes.data);
+      } catch {}
+    })();
+  }, [isCoordenador, accessToken, id, headers]);
 
   const handleCheckin = useCallback(async () => {
     if (!evento) return;
@@ -238,6 +285,42 @@ export default function EventoDetalhe() {
       },
     });
   }, [id, headers, show]);
+
+  const handleAceitarVinculo = useCallback(() => {
+    if (!pcVinculo) return;
+    show({
+      type: 'confirm',
+      title: 'Aceitar vínculo ao evento?',
+      message: 'Seu ponto de coleta passará a participar deste evento e receberá demandas associadas.',
+      confirmLabel: 'Aceitar',
+      cancelLabel: 'Cancelar',
+      onConfirm: async () => {
+        try {
+          await api.patch(`/pontos-coleta/${pcVinculo.pcId}/eventos/${id}/aceitar`, null, { headers });
+          setPcVinculo((prev) => prev ? { ...prev, status: 'ACEITO' } : null);
+          show({ type: 'success', title: 'Vínculo aceito!', message: 'Seu PC está vinculado a este evento.' });
+        } catch (err: any) {
+          show({ type: 'error', title: 'Erro', message: err?.response?.data?.message ?? 'Não foi possível aceitar o vínculo.' });
+        }
+      },
+    });
+  }, [pcVinculo, id, headers, show]);
+
+  const handleRecusarVinculo = useCallback(async (motivoId: string, descricao?: string) => {
+    if (!pcVinculo) return;
+    try {
+      await api.patch(
+        `/pontos-coleta/${pcVinculo.pcId}/eventos/${id}/recusar`,
+        { motivoRecusaId: motivoId, descricao: descricao?.trim() || undefined },
+        { headers },
+      );
+      setPcVinculo((prev) => prev ? { ...prev, status: 'RECUSADO' } : null);
+      setRecusarOpen(false);
+      show({ type: 'success', title: 'Vínculo recusado', message: 'O convite foi recusado.' });
+    } catch (err: any) {
+      show({ type: 'error', title: 'Erro', message: err?.response?.data?.message ?? 'Não foi possível recusar.' });
+    }
+  }, [pcVinculo, id, headers, show]);
 
   if (loading) {
     return (
@@ -301,6 +384,9 @@ export default function EventoDetalhe() {
             onCheckout={handleCheckout}
             onAprovar={handleAprovar}
             onCancelar={handleCancelar}
+            pcVinculo={pcVinculo}
+            onAceitarVinculo={handleAceitarVinculo}
+            onRecusarVinculo={() => setRecusarOpen(true)}
           />
         )}
         {activeTab === 'incidentes' && (
@@ -309,6 +395,14 @@ export default function EventoDetalhe() {
         {activeTab === 'demandas' && <TabDemandas demandas={demandas} />}
         {activeTab === 'historico' && <TabHistorico isMonitor={isMonitor} historico={historico} />}
       </ScrollView>
+      {recusarOpen && (
+        <RecusarVinculoModal
+          visible={recusarOpen}
+          motivos={motivosRecusa}
+          onConfirm={handleRecusarVinculo}
+          onClose={() => setRecusarOpen(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -326,10 +420,15 @@ interface TabVisaoGeralProps {
   onCheckout: () => void;
   onAprovar: () => void;
   onCancelar: () => void;
+  pcVinculo: PcVinculo | null;
+  onAceitarVinculo: () => void;
+  onRecusarVinculo: () => void;
 }
 
 function TabVisaoGeral({
-  evento, sev, sts, canCheckin, checkedIn, isGestor, onCheckin, onCheckout, onAprovar, onCancelar,
+  evento, sev, sts, canCheckin, checkedIn, isGestor,
+  onCheckin, onCheckout, onAprovar, onCancelar,
+  pcVinculo, onAceitarVinculo, onRecusarVinculo,
 }: TabVisaoGeralProps) {
   return (
     <>
@@ -369,6 +468,55 @@ function TabVisaoGeral({
 
         <InfoRow icon="calendar-outline" label="Solicitado em" value={formatDate(evento.dataSolicitacao)} />
       </View>
+
+      {/* Vínculo do ponto de coleta */}
+      {pcVinculo?.status === 'NOTIFICADO' && (
+        <View style={[styles.card, styles.vinculoPendente]}>
+          <View style={styles.vinculoHeader}>
+            <Ionicons name="mail-unread-outline" size={18} color="#C2410C" />
+            <Text style={styles.vinculoTitle}>Convite de participação</Text>
+          </View>
+          <Text style={styles.vinculoDesc}>
+            Seu ponto de coleta foi convidado para participar deste evento. Aceite para receber demandas vinculadas.
+          </Text>
+          <TouchableOpacity
+            style={styles.vinculoResponderBtn}
+            onPress={() => router.push({
+              pathname: '/evento-convite',
+              params: {
+                eventoId:    evento!.id,
+                titulo:      evento!.titulo,
+                tipoNome:    evento!.tipoNome,
+                severidade:  evento!.severidade,
+                pcId:        pcVinculo!.pcId,
+                pcEventoId:  pcVinculo!.pcEventoId,
+              },
+            } as never)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="mail-open-outline" size={15} color="#fff" />
+            <Text style={styles.vinculoResponderText}>Responder</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {pcVinculo?.status === 'ACEITO' && (
+        <View style={[styles.card, styles.vinculoAceito]}>
+          <View style={styles.vinculoHeader}>
+            <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
+            <Text style={[styles.vinculoTitle, { color: '#166534' }]}>Vínculo aceito</Text>
+          </View>
+          <Text style={styles.vinculoDesc}>Seu ponto de coleta está participando deste evento.</Text>
+        </View>
+      )}
+      {pcVinculo?.status === 'RECUSADO' && (
+        <View style={[styles.card, styles.vinculoRecusado]}>
+          <View style={styles.vinculoHeader}>
+            <Ionicons name="close-circle" size={18} color="#DC2626" />
+            <Text style={[styles.vinculoTitle, { color: '#991B1B' }]}>Vínculo recusado</Text>
+          </View>
+          <Text style={styles.vinculoDesc}>Você recusou o convite para este evento.</Text>
+        </View>
+      )}
 
       {/* Ações de campo */}
       {(canCheckin || isGestor) && (
@@ -600,6 +748,112 @@ function AccessRestricted() {
   );
 }
 
+// ── Modal: Recusar vínculo ────────────────────────────────────
+
+interface RecusarVinculoModalProps {
+  visible: boolean;
+  motivos: MotivoRecusaDTO[];
+  onConfirm: (motivoId: string, descricao?: string) => Promise<void>;
+  onClose: () => void;
+}
+
+function RecusarVinculoModal({ visible, motivos, onConfirm, onClose }: RecusarVinculoModalProps) {
+  const [motivoId,  setMotivoId ] = useState<string | null>(null);
+  const [descricao, setDescricao] = useState('');
+  const [saving,    setSaving   ] = useState(false);
+  const [error,     setError    ] = useState<string | null>(null);
+
+  const selecionado = motivos.find((m) => m.id === motivoId);
+
+  function reset() { setMotivoId(null); setDescricao(''); setError(null); }
+  function close()  { reset(); onClose(); }
+
+  async function confirm() {
+    if (!motivoId) return;
+    if (selecionado?.descricaoObrigatoria && !descricao.trim()) {
+      setError('Descrição obrigatória para este motivo.');
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try   { await onConfirm(motivoId, descricao); reset(); }
+    catch { setError('Não foi possível recusar o vínculo. Tente novamente.'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Recusar vínculo</Text>
+            <TouchableOpacity onPress={close} hitSlop={8}>
+              <Ionicons name="close" size={22} color="#64748B" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.modalSubtitle}>Selecione o motivo da recusa</Text>
+          <FlatList
+            data={motivos}
+            keyExtractor={(m) => m.id}
+            style={{ maxHeight: 200 }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.motivoItem, motivoId === item.id && styles.motivoItemSel]}
+                onPress={() => { setMotivoId(item.id); setError(null); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.motivoLabel, motivoId === item.id && { color: Colors.blue.dark, fontWeight: '700' }]}>
+                  {item.label}
+                </Text>
+                {motivoId === item.id && <Ionicons name="checkmark-circle" size={18} color={Colors.blue.dark} />}
+              </TouchableOpacity>
+            )}
+          />
+
+          {motivoId && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={styles.fieldLabel}>
+                Descrição{selecionado?.descricaoObrigatoria ? ' (obrigatória)' : ' (opcional)'}
+              </Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                value={descricao}
+                onChangeText={(v) => { setDescricao(v); setError(null); }}
+                multiline
+                placeholder="Explique o motivo..."
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+          )}
+
+          {error && (
+            <View style={styles.modalErrorBox}>
+              <Ionicons name="alert-circle-outline" size={14} color="#DC2626" />
+              <Text style={styles.modalErrorText}>{error}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.recusarConfirmBtn, (!motivoId || saving) && { opacity: 0.45 }]}
+            onPress={confirm}
+            disabled={!motivoId || saving}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={styles.recusarConfirmText}>Confirmar recusa</Text>}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ── Estilos ──────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -705,4 +959,68 @@ const styles = StyleSheet.create({
   restrictedBox:   { alignItems: 'center', gap: 8, paddingVertical: 20 },
   restrictedTitle: { fontSize: 15, fontWeight: '700', color: '#64748B' },
   restrictedSub:   { fontSize: 13, color: '#94A3B8', textAlign: 'center' },
+
+  // Vínculo PC-evento
+  vinculoPendente: { borderLeftWidth: 4, borderLeftColor: '#C2410C' },
+  vinculoAceito:   { borderLeftWidth: 4, borderLeftColor: '#16A34A' },
+  vinculoRecusado: { borderLeftWidth: 4, borderLeftColor: '#DC2626' },
+  vinculoHeader:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  vinculoTitle:    { fontSize: 14, fontWeight: '800', color: '#C2410C' },
+  vinculoDesc:     { fontSize: 13, color: '#64748B', lineHeight: 18 },
+  vinculoBtns:     { flexDirection: 'row', gap: 8, marginTop: 4 },
+  vinculoAceitarBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, backgroundColor: '#16A34A', borderRadius: 10, paddingVertical: 10,
+  },
+  vinculoAceitarText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  vinculoRecusarBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, backgroundColor: '#FEE2E2', borderRadius: 10, paddingVertical: 10,
+    paddingHorizontal: 16, borderWidth: 1, borderColor: '#FECACA',
+  },
+  vinculoRecusarText: { color: '#DC2626', fontSize: 13, fontWeight: '700' },
+  vinculoResponderBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: Colors.blue.dark, borderRadius: 12,
+    paddingVertical: 12, marginTop: 6,
+  },
+  vinculoResponderText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Modal de recusa
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 20, paddingBottom: 32, maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14,
+  },
+  modalTitle:    { fontSize: 17, fontWeight: '800', color: '#1E293B' },
+  modalSubtitle: { fontSize: 13, color: '#64748B', marginBottom: 10 },
+  motivoItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 11, paddingHorizontal: 12,
+    borderRadius: 10, marginBottom: 4, backgroundColor: '#F8FAFC',
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  motivoItemSel: { backgroundColor: '#EFF6FF', borderColor: Colors.blue.dark },
+  motivoLabel:   { fontSize: 14, color: '#334155', flex: 1, marginRight: 8 },
+  fieldLabel:    { fontSize: 12, fontWeight: '700', color: '#64748B', marginBottom: 6 },
+  textInput: {
+    borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: '#1E293B', backgroundColor: '#F8FAFC', marginBottom: 14,
+  },
+  textArea: { height: 72, textAlignVertical: 'top' },
+  modalErrorBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 7,
+    backgroundColor: '#FEE2E2', borderRadius: 10, padding: 10, marginBottom: 8,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  modalErrorText: { flex: 1, fontSize: 12, color: '#DC2626', lineHeight: 17 },
+  recusarConfirmBtn: {
+    backgroundColor: '#DC2626', borderRadius: 14,
+    paddingVertical: 14, alignItems: 'center', marginTop: 8,
+  },
+  recusarConfirmText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

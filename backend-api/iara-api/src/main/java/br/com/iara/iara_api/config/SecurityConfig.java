@@ -37,6 +37,9 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(e -> e.authenticationEntryPoint(authEntryPoint))
                 .authorizeHttpRequests(auth -> auth
+                        // /especialidades liberado sem autenticacao: o fluxo de cadastro de
+                        // voluntario (signup-voluntario.tsx) precisa listar especialidades antes
+                        // de o usuario possuir um token JWT. Endpoint somente leitura (GET).
                         .requestMatchers(
                                 "/auth/mobile/login",
                                 "/auth/mobile/register",
@@ -48,9 +51,8 @@ public class SecurityConfig {
                                 "/usuarios/cadastro/**",
                                 "/ws/**"
                         ).permitAll()
-                        // /especialidades GET é referência pública (lista de catálogo
-                        // usada na tela de cadastro de TECNICO antes do login).
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/especialidades",
                                 "/especialidades/**"
                         ).permitAll()
                         .anyRequest().authenticated()

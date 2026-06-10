@@ -87,8 +87,14 @@ async function lookupCep(cep: string): Promise<{
 // ── Tela ─────────────────────────────────────────────────────
 
 export default function Report() {
-  const { accessToken } = useAuth();
+  const { accessToken, role } = useAuth();
   const { show, modal }  = useAppModal();
+
+  // Guard: COORDENADOR não tem acesso a esta aba — retorna fundo neutro
+  // para que a animação de transição não exponha a UI de reporte.
+  if (role === 'COORDENADOR') {
+    return <View style={{ flex: 1, backgroundColor: '#dfdfdf' }} />;
+  }
 
   // Lookup
   const [tipos, setTipos]             = useState<DesastreTipoDTO[]>([]);

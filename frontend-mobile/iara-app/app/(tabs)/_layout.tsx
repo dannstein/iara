@@ -6,13 +6,13 @@ import { useAuth, type UserRole } from '../../context/AuthContext';
 const { Navigator } = createMaterialTopTabNavigator();
 const SwipeableTabs = withLayoutContext(Navigator);
 
-const ALL_TABS = ['home', 'events', 'report', 'pontos', 'menu', 'profile'] as const;
+const ALL_TABS = ['home', 'events', 'report', 'meupc', 'pontos', 'menu', 'profile'] as const;
 
 const TABS_BY_ROLE: Record<string, readonly string[]> = {
   DOADOR:          ['home', 'events', 'pontos', 'menu'],
   USUARIO_SIMPLES: ['home', 'events', 'pontos', 'menu'],
-  COORDENADOR:     ['home', 'events', 'report', 'pontos', 'menu'],
-  TECNICO:         ['home', 'events', 'report', 'pontos', 'menu'],
+  COORDENADOR:     ['home', 'events', 'meupc', 'pontos', 'menu'],
+  TECNICO:         ['home', 'events', 'pontos', 'menu'],
   MONITOR:         ['home', 'events', 'report', 'pontos', 'menu'],
   GESTOR:          ['home', 'events', 'report', 'pontos', 'menu'],
   ADMIN:           ['home', 'events', 'report', 'pontos', 'menu'],
@@ -22,6 +22,7 @@ const TAB_TITLES: Record<string, string> = {
   home:    'Home',
   events:  'Eventos',
   report:  'Reportar',
+  meupc:   'Meu PC',
   pontos:  'Locais',
   menu:    'Menu',
   profile: 'Perfil',

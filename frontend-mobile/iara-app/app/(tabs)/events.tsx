@@ -86,13 +86,7 @@ export default function Events() {
   const fetchEventos = useCallback(async (forceRefresh = false) => {
     if (!accessToken) return;
     try {
-      let data: EventoDTO[];
-      if (forceRefresh) {
-        const res = await api.get<EventoDTO[]>('/eventos', { headers });
-        data = res.data;
-      } else {
-        data = await apiCached<EventoDTO[]>('/eventos', headers, TTL.eventos);
-      }
+      const data = await apiCached<EventoDTO[]>('/eventos', headers, TTL.eventos);
       setEventos(data.filter((e) => !e.isSimulado));
     } catch {
       // mantém dados em cache se já carregados

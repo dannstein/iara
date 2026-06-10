@@ -66,9 +66,7 @@ export default function PontosColetaScreen() {
   const fetchTudo = useCallback(async (force = false) => {
     if (!accessToken) return;
     try {
-      const pcs: PcDTO[] = force
-        ? (await api.get<PcDTO[]>('/pontos-coleta?is_active=true', { headers })).data
-        : await apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers, TTL.pontos);
+      const pcs = await apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers, TTL.pontos);
 
       const ordenados = [...pcs].sort((a, b) => pontuacao(b) - pontuacao(a));
 
