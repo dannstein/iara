@@ -32,6 +32,7 @@ export function useAlertasWebsocket() {
     function handle(p: AlertPushPayload) {
       qc.invalidateQueries({ queryKey: ['alertas'] });
       qc.invalidateQueries({ queryKey: ['alertas-dashboard'] });
+      qc.invalidateQueries({ queryKey: ['eventos'] });
       if (p.id) {
         qc.invalidateQueries({ queryKey: ['alerta', p.id] });
       }
@@ -39,7 +40,7 @@ export function useAlertasWebsocket() {
 
     // Aguarda conexão antes de assinar.
     const onConnect = () => {
-      const tenantId = activeTenant ?? user?.userId;
+      const tenantId = activeTenant ?? user?.tenantId;
       if (tenantId && user) {
         subscribeTenant(tenantId, handle);
         subscribeUser(handle);

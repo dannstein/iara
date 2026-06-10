@@ -14,6 +14,7 @@ let _client: Client | null = null;
 export function connectAlertaSocket(
   wsUrl: string,
   accessToken: string,
+  tenantId: string,
   onMessage: (payload: AlertaSocketPayload) => void,
 ) {
   disconnectAlertaSocket();
@@ -28,6 +29,13 @@ export function connectAlertaSocket(
           onMessage(JSON.parse(msg.body) as AlertaSocketPayload);
         } catch {}
       });
+      if (tenantId) {
+        _client?.subscribe(`/topic/tenant/${tenantId}/alertas`, (msg: IMessage) => {
+          try {
+            onMessage(JSON.parse(msg.body) as AlertaSocketPayload);
+          } catch {}
+        });
+      }
     },
     onStompError: () => {},
     onDisconnect: () => {},

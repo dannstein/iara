@@ -47,7 +47,8 @@ public class RefreshTokenService {
 
         long accessExpiresAt = jwtUtil.extractExpiration(accessToken).toInstant().toEpochMilli();
         return TokenResponse.of(accessToken, refreshToken.getToken(), accessExpiresAt,
-                usuario.getId(), usuario.getEmail(), usuario.getRole().getRoleNome());
+                usuario.getId(), usuario.getTenant().getId(),
+                usuario.getEmail(), usuario.getRole().getRoleNome());
     }
 
     @Transactional
@@ -82,7 +83,8 @@ public class RefreshTokenService {
 
         long accessExpiresAt = jwtUtil.extractExpiration(newAccessToken).toInstant().toEpochMilli();
         return TokenResponse.of(newAccessToken, newToken.getToken(), accessExpiresAt,
-                usuario.getId(), usuario.getEmail(), usuario.getRole().getRoleNome());
+                usuario.getId(), usuario.getTenant().getId(),
+                usuario.getEmail(), usuario.getRole().getRoleNome());
     }
 
     @Transactional

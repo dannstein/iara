@@ -4,6 +4,7 @@ import type { Role, TokenResponse } from '@/types/api';
 
 interface AuthUser {
   userId: string;
+  tenantId: string;
   email: string;
   role: Role;
 }
@@ -29,7 +30,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           accessToken: t.accessToken,
           refreshToken: t.refreshToken,
-          user: { userId: t.userId, email: t.email, role: t.role },
+          user: { userId: t.userId, tenantId: t.tenantId, email: t.email, role: t.role },
           isAuthenticated: true,
         }),
       setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),

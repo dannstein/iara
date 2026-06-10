@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
@@ -88,7 +89,7 @@ const ZONA_COLOR = (nivel: number) =>
 
 export default function Home() {
   const { role, nome, email, accessToken } = useAuth();
-  const { notificationCount } = useAlerta();
+  const { notificationCount, lastAlertAt, refresh: refreshAlertas } = useAlerta();
   const isDoador = DOADOR_ROLES.has(role ?? '');
   const layers   = isDoador ? DOADOR_LAYERS : STAFF_LAYERS;
 
@@ -123,24 +124,39 @@ export default function Home() {
     }).catch(() => {});
   }, [accessToken]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!accessToken) return;
+
+      refreshAlertas();
+
+      apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers)
+        .then(setPcs).catch(() => {});
+
+      apiCached<ZonaRiscoDTO[]>('/zonas-risco', headers)
+        .then((d) => setZonas(d.filter((z) => z.isActive))).catch(() => {});
+
+      apiCached<EventoDTO[]>('/eventos', headers)
+        .then((d) => setEventos(d.filter((e) => e.status !== 'ENCERRADO' && e.status !== 'CANCELADO')))
+        .catch(() => {});
+
+      if (!isDoador) {
+        apiCached<PontoApoioDTO[]>('/pontos-apoio', headers)
+          .then((d) => setPontosApoio(d.filter((p) => p.isActive))).catch(() => {});
+      }
+    }, [accessToken, headers, isDoador, refreshAlertas]),
+  );
+
+  // Smart refresh: re-busca eventos e zonas quando qualquer push do backend chega
   useEffect(() => {
-    if (!accessToken) return;
-
-    apiCached<PcDTO[]>('/pontos-coleta?is_active=true', headers)
-      .then(setPcs).catch(() => {});
-
-    apiCached<ZonaRiscoDTO[]>('/zonas-risco', headers)
-      .then((d) => setZonas(d.filter((z) => z.isActive))).catch(() => {});
-
+    if (!lastAlertAt || !accessToken) return;
     apiCached<EventoDTO[]>('/eventos', headers)
       .then((d) => setEventos(d.filter((e) => e.status !== 'ENCERRADO' && e.status !== 'CANCELADO')))
       .catch(() => {});
-
-    if (!isDoador) {
-      apiCached<PontoApoioDTO[]>('/pontos-apoio', headers)
-        .then((d) => setPontosApoio(d.filter((p) => p.isActive))).catch(() => {});
-    }
-  }, [accessToken, headers, isDoador]);
+    apiCached<ZonaRiscoDTO[]>('/zonas-risco', headers)
+      .then((d) => setZonas(d.filter((z) => z.isActive))).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastAlertAt]);
 
   const toggleFilter = useCallback((key: string) => {
     setActiveFilters((prev) => {
